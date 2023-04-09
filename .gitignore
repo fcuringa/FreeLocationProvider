@@ -13,3 +13,6 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Mapbox token
+app/src/main/res/values/mapbox.xml
