@@ -38,15 +38,10 @@ class NavigationViewActivity : AppCompatActivity() {
     private lateinit var binding: MapboxActivityNavigationViewBinding
     private lateinit var pointAnnotationManager: PointAnnotationManager
 
-    private val freeLocationProvider: FreeLocationProvider = FreeLocationProvider(
-        engine = UseGpsOnlyEngine(
-            gpsLocationDataSource = InMemoryLocationModelDataSource(),
-            fusedLocationDataSource = InMemoryLocationModelDataSource(),
-            sensorDataModelDataSource = InMemorySensorDataModelDataSource(),
-            coroutineScope = CoroutineScope(Dispatchers.IO),
-            fusedUpdatesDelayMs = 100
-        )
-    )
+    private val freeLocationProvider: FreeLocationProvider = FreeLocationProvider.Builder.Builder()
+        .engineType(FreeLocationProvider.Builder.EngineType.GPS_INTERPOLATION)
+        .sampleTimeLocationUpdate(20)
+        .build()
     private var curTime = LocalDateTime.MIN
 
     suspend fun waitUntil(time: LocalDateTime) {
