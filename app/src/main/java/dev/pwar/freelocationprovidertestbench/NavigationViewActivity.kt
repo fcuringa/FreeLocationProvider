@@ -5,46 +5,48 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
-import android.hardware.SensorEvent
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import androidx.annotation.DrawableRes
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
-import androidx.compose.ui.platform.LocalContext
 import com.mapbox.geojson.Point
 import com.mapbox.maps.plugin.annotation.annotations
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
 import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
-import com.mapbox.navigation.core.MapboxNavigation
 import com.mapbox.navigation.core.lifecycle.MapboxNavigationApp
-import com.mapbox.navigation.core.lifecycle.requireMapboxNavigation
 import com.mapbox.navigation.core.replay.history.ReplayEventLocation
 import com.mapbox.navigation.core.replay.history.ReplayEventUpdateLocation
-import com.mapbox.navigation.dropin.map.MapViewBinder
 import com.mapbox.navigation.dropin.map.MapViewObserver
 import dev.pwar.freelocationprovider.FreeLocationProvider
-import dev.pwar.freelocationprovider.domain.LocationModel
+import dev.pwar.freelocationprovider.framework.InMemoryLocationModelDataSource
+import dev.pwar.freelocationprovider.framework.InMemorySensorDataModelDataSource
 import dev.pwar.freelocationprovider.mapper.locationModelFromLogLineMapper
 import dev.pwar.freelocationprovider.mapper.sensorDataModelFromLogLine
+import dev.pwar.freelocationprovider.usecase.UseGpsOnlyEngine
 import dev.pwar.freelocationprovidertestbench.databinding.MapboxActivityNavigationViewBinding
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.onEach
-import org.osmdroid.views.MapView
+import kotlinx.coroutines.flow.combine
 import java.io.File
 import java.time.LocalDateTime
 import java.time.ZoneOffset
-import kotlin.coroutines.coroutineContext
 
 class NavigationViewActivity : AppCompatActivity() {
     private lateinit var binding: MapboxActivityNavigationViewBinding
     private lateinit var pointAnnotationManager: PointAnnotationManager
 
-    private val freeLocationProvider: FreeLocationProvider = FreeLocationProvider()
+    private val freeLocationProvider: FreeLocationProvider = FreeLocationProvider(
+        engine = UseGpsOnlyEngine(
+            gpsLocationDataSource = InMemoryLocationModelDataSource(),
+            fusedLocationDataSource = InMemoryLocationModelDataSource(),
+            sensorDataModelDataSource = InMemorySensorDataModelDataSource(),
+            coroutineScope = CoroutineScope(Dispatchers.IO),
+            fusedUpdatesDelayMs = 100
+        )
+    )
     private var curTime = LocalDateTime.MIN
 
     suspend fun waitUntil(time: LocalDateTime) {
@@ -71,7 +73,7 @@ class NavigationViewActivity : AppCompatActivity() {
                     val sensorDataModel = sensorDataModelFromLogLine(line)
                     waitUntil(sensorDataModel.timestamp)
 
-                    freeLocationProvider.feedSensor(sensorDataModel)
+                    freeLocationProvider.feedSimulatedSensor(sensorDataModel)
                     Log.d("handleFile", "Fed $sensorDataModel")
                 } catch (_: Error) {
                 }
@@ -83,7 +85,7 @@ class NavigationViewActivity : AppCompatActivity() {
                     waitUntil(locationModel.timestamp)
 
                     // Time to apply
-                    freeLocationProvider.feedLocation(locationModel)
+                    freeLocationProvider.feedSimulatedLocation(locationModel)
                     Log.d("handleFile", "Fed $locationModel")
                 } catch (_: Error) {
                 }
@@ -144,19 +146,30 @@ class NavigationViewActivity : AppCompatActivity() {
 // Set options for the resulting symbol layer.
 
         GlobalScope.launch(Dispatchers.Main) {
-            freeLocationProvider.getLocationFlow().collect {
-
-                val pointAnnotationOptions: PointAnnotationOptions = PointAnnotationOptions()
+            freeLocationProvider.getFusedLocationFlow().combine(
+                freeLocationProvider.getRawLocationFlow()) {
+                fusedLocation, rawLocation -> Pair(fusedLocation, rawLocation)
+            }.collect {
+                val fusedLocation = it.first
+                val rawLocation = it.second
+                val pointAnnotationOptionsFused: PointAnnotationOptions = PointAnnotationOptions()
                     // Define a geographic coordinate.
-                    .withPoint(Point.fromLngLat(it.longitude, it.latitude))
+                    .withPoint(Point.fromLngLat(fusedLocation.longitude, fusedLocation.latitude))
                     // Specify the bitmap you assigned to the point annotation
                     // The bitmap will be added to map style automatically.
                     .withIconImage(bitmapFromDrawableRes(this@NavigationViewActivity, R.drawable.baseline_blue_place_24)!!)
 
+                val pointAnnotationOptionsRaw: PointAnnotationOptions = PointAnnotationOptions()
+                    // Define a geographic coordinate.
+                    .withPoint(Point.fromLngLat(rawLocation.longitude, rawLocation.latitude))
+                    // Specify the bitmap you assigned to the point annotation
+                    // The bitmap will be added to map style automatically.
+                    .withIconImage(bitmapFromDrawableRes(this@NavigationViewActivity, R.drawable.baseline_place_24)!!)
 
                 if (this@NavigationViewActivity::pointAnnotationManager.isInitialized){
                     pointAnnotationManager.deleteAll()
-                    pointAnnotationManager.create(pointAnnotationOptions)
+                    pointAnnotationManager.create(pointAnnotationOptionsFused)
+                    pointAnnotationManager.create(pointAnnotationOptionsRaw)
                 } else {
                     Log.w("pointAnnotationManager", "pointAnnotationManager is not initialized")
                 }
@@ -164,7 +177,7 @@ class NavigationViewActivity : AppCompatActivity() {
         }
 
         GlobalScope.launch(Dispatchers.IO) {
-            freeLocationProvider.getLocationFlow().collect {
+            freeLocationProvider.getFusedLocationFlow().collect {
                 Log.d("freeLocationProvider.getLocationFlow", "Applying $it")
 
                 MapboxNavigationApp.current()?.mapboxReplayer?.pushEvents(
