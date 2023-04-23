@@ -5,6 +5,7 @@ import dev.pwar.freelocationprovider.domain.SensorDataModel
 import dev.pwar.freelocationprovider.framework.InMemoryLocationModelDataSource
 import dev.pwar.freelocationprovider.framework.InMemorySensorDataModelDataSource
 import dev.pwar.freelocationprovider.usecase.UseCaseEngine
+import dev.pwar.freelocationprovider.usecase.UseGpsLinearAccelKalmanEngine
 import dev.pwar.freelocationprovider.usecase.UseGpsOnlyEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,13 +36,16 @@ class FreeLocationProvider(
     }
 
     companion object Builder {
+        const val FUSED_UPDATES_DELAY_MS = 20L
+
         enum class EngineType {
             INVALID,
-            GPS_INTERPOLATION
+            GPS_INTERPOLATION,
+            FUSED_LINEAR_ACCELERATION
         }
         class Builder() {
             private var engineType: EngineType = EngineType.GPS_INTERPOLATION
-            private var sampleTimeLocationUpdateMs: Long = 20
+            private var sampleTimeLocationUpdateMs: Long = FUSED_UPDATES_DELAY_MS
 
             fun engineType(type: EngineType): Builder {
                 this.engineType = type
@@ -57,6 +61,16 @@ class FreeLocationProvider(
                 when(this.engineType) {
                     EngineType.GPS_INTERPOLATION -> {
                         val engine = UseGpsOnlyEngine(
+                            gpsLocationDataSource = InMemoryLocationModelDataSource(),
+                            fusedLocationDataSource = InMemoryLocationModelDataSource(),
+                            sensorDataModelDataSource = InMemorySensorDataModelDataSource(),
+                            coroutineScope = CoroutineScope(Dispatchers.IO),
+                            fusedUpdatesDelayMs = this.sampleTimeLocationUpdateMs
+                        )
+                        return FreeLocationProvider(engine)
+                    }
+                    EngineType.FUSED_LINEAR_ACCELERATION -> {
+                        val engine = UseGpsLinearAccelKalmanEngine(
                             gpsLocationDataSource = InMemoryLocationModelDataSource(),
                             fusedLocationDataSource = InMemoryLocationModelDataSource(),
                             sensorDataModelDataSource = InMemorySensorDataModelDataSource(),

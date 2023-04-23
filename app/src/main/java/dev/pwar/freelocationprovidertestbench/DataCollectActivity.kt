@@ -145,6 +145,7 @@ class DataCollectActivity : ComponentActivity(), SensorEventListener {
         val rotVecSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
         val accelSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         val gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+        val rotVector = sensorManager.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
 
         // Listen to sensors
         sensorManager.registerListener(this, gravitySensor, SensorManager.SENSOR_DELAY_UI)
@@ -152,6 +153,7 @@ class DataCollectActivity : ComponentActivity(), SensorEventListener {
         sensorManager.registerListener(this, rotVecSensor, SensorManager.SENSOR_DELAY_UI)
         sensorManager.registerListener(this, accelSensor, SensorManager.SENSOR_DELAY_UI)
         sensorManager.registerListener(this, gyroSensor, SensorManager.SENSOR_DELAY_UI)
+        sensorManager.registerListener(this, rotVector, SensorManager.SENSOR_DELAY_UI)
 
         // Permission check
         val requestPermissionLauncher = registerForActivityResult(RequestPermission()) {}

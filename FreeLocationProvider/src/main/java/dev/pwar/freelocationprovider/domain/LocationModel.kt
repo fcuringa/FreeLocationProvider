@@ -1,5 +1,6 @@
 package dev.pwar.freelocationprovider.domain
 
+import kotlinx.serialization.Serializable
 import java.time.LocalDateTime
 
 data class LocationModel(
@@ -18,6 +19,17 @@ data class LocationModel(
             speed = 0.0,
             accuracy = 0.0,
             timestamp = LocalDateTime.MIN
+        )
+    }
+
+    fun minus(other: LocationModel): LocationModel{
+        return LocationModel(
+            timestamp = LocalDateTime.MIN,
+            latitude = latitude - other.latitude,
+            longitude = longitude - other.longitude,
+            bearing = bearing - other.bearing,
+            speed = speed - other.speed,
+            accuracy = accuracy - other.accuracy
         )
     }
 

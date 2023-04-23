@@ -22,11 +22,8 @@ import com.mapbox.navigation.core.replay.history.ReplayEventLocation
 import com.mapbox.navigation.core.replay.history.ReplayEventUpdateLocation
 import com.mapbox.navigation.dropin.map.MapViewObserver
 import dev.pwar.freelocationprovider.FreeLocationProvider
-import dev.pwar.freelocationprovider.framework.InMemoryLocationModelDataSource
-import dev.pwar.freelocationprovider.framework.InMemorySensorDataModelDataSource
 import dev.pwar.freelocationprovider.mapper.locationModelFromLogLineMapper
 import dev.pwar.freelocationprovider.mapper.sensorDataModelFromLogLine
-import dev.pwar.freelocationprovider.usecase.UseGpsOnlyEngine
 import dev.pwar.freelocationprovidertestbench.databinding.MapboxActivityNavigationViewBinding
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.combine
@@ -34,13 +31,13 @@ import java.io.File
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 
-class NavigationViewActivity : AppCompatActivity() {
+class NavigationReplayFromFileActivity : AppCompatActivity() {
     private lateinit var binding: MapboxActivityNavigationViewBinding
     private lateinit var pointAnnotationManager: PointAnnotationManager
 
     private val freeLocationProvider: FreeLocationProvider = FreeLocationProvider.Builder.Builder()
-        .engineType(FreeLocationProvider.Builder.EngineType.GPS_INTERPOLATION)
-        .sampleTimeLocationUpdate(20)
+        .engineType(FreeLocationProvider.Builder.EngineType.FUSED_LINEAR_ACCELERATION)
+        .sampleTimeLocationUpdate(200)
         .build()
     private var curTime = LocalDateTime.MIN
 
@@ -152,16 +149,16 @@ class NavigationViewActivity : AppCompatActivity() {
                     .withPoint(Point.fromLngLat(fusedLocation.longitude, fusedLocation.latitude))
                     // Specify the bitmap you assigned to the point annotation
                     // The bitmap will be added to map style automatically.
-                    .withIconImage(bitmapFromDrawableRes(this@NavigationViewActivity, R.drawable.baseline_blue_place_24)!!)
+                    .withIconImage(bitmapFromDrawableRes(this@NavigationReplayFromFileActivity, R.drawable.baseline_blue_place_24)!!)
 
                 val pointAnnotationOptionsRaw: PointAnnotationOptions = PointAnnotationOptions()
                     // Define a geographic coordinate.
                     .withPoint(Point.fromLngLat(rawLocation.longitude, rawLocation.latitude))
                     // Specify the bitmap you assigned to the point annotation
                     // The bitmap will be added to map style automatically.
-                    .withIconImage(bitmapFromDrawableRes(this@NavigationViewActivity, R.drawable.baseline_place_24)!!)
+                    .withIconImage(bitmapFromDrawableRes(this@NavigationReplayFromFileActivity, R.drawable.baseline_place_24)!!)
 
-                if (this@NavigationViewActivity::pointAnnotationManager.isInitialized){
+                if (this@NavigationReplayFromFileActivity::pointAnnotationManager.isInitialized){
                     pointAnnotationManager.deleteAll()
                     pointAnnotationManager.create(pointAnnotationOptionsFused)
                     pointAnnotationManager.create(pointAnnotationOptionsRaw)

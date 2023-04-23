@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId "dev.pwar.freelocationprovidertestbench"
-        minSdk 31
+        minSdk 30
         targetSdk 33
         versionCode 1
         versionName "1.0"
@@ -35,8 +35,11 @@ android {
     }
     buildFeatures {
         viewBinding true
-
+        dataBinding true
         compose true
+    }
+    dataBinding {
+        android.buildFeatures.dataBinding = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion '1.2.0'
@@ -58,10 +61,14 @@ dependencies {
     implementation 'androidx.compose.material:material:1.2.0'
     implementation 'com.google.android.gms:play-services-location:21.0.1'
     implementation "com.mapbox.navigation:ui-dropin:2.11.0"
+    implementation "com.mapbox.navigation:android:2.10.4"
     implementation 'com.mapbox.maps:android:10.12.1'
     implementation 'org.osmdroid:osmdroid-android:6.1.10'
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation project(":FreeLocationProvider")
+    implementation project(":FreeLocationProviderMapbox")
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.cardview:cardview:1.0.0'
 
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'

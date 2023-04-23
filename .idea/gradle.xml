@@ -11,6 +11,7 @@
           <set>
             <option value="$PROJECT_DIR$" />
             <option value="$PROJECT_DIR$/FreeLocationProvider" />
+            <option value="$PROJECT_DIR$/FreeLocationProviderMapbox" />
             <option value="$PROJECT_DIR$/app" />
           </set>
         </option>

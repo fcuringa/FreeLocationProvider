@@ -28,3 +28,4 @@ dependencyResolutionManagement {
 rootProject.name = "FreeLocationProvider Test Bench"
 include ':app'
 include ':FreeLocationProvider'
+include ':FreeLocationProviderMapbox'

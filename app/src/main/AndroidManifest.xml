@@ -38,9 +38,19 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".NavigationViewActivity"
+        <activity android:name=".NavigationReplayFromFileActivity"
             android:exported="true"
             android:theme="@style/Theme.AppCompat.DayNight">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity android:name=".TurnByTurnActivity"
+            android:exported="true"
+            android:theme="@style/Theme.FreeLocationProviderTestBench.Nav"
+            >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 

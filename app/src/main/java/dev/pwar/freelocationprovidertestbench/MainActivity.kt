@@ -2,13 +2,10 @@ package dev.pwar.freelocationprovidertestbench
 
 import android.content.Intent
 import android.os.Bundle
-import android.os.PersistableBundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,7 +28,10 @@ class MainActivity : ComponentActivity() {
         setContent {
             val context = LocalContext.current
             FreeLocationProviderTestBenchTheme {
-                var expanded by remember { mutableStateOf(false) }
+                var expandedReplay by remember { mutableStateOf(false) }
+                var expandedNavigation by remember {
+                    mutableStateOf(false)
+                }
 
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -49,23 +49,26 @@ class MainActivity : ComponentActivity() {
                             Text("Start Collecting data")
                         }
                         Button(onClick = {
-                            expanded = true
+                            expandedReplay = true
                         }) {
                             Text("Start Replaying data from file...")
+                        }
+                        Button(onClick = { expandedNavigation = true }) {
+                            Text(text = "Start navigating...")
                         }
                     }
                     Box(modifier = Modifier
                         .fillMaxSize()
                         .wrapContentSize(Alignment.Center)) {
 
-                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        DropdownMenu(expanded = expandedReplay, onDismissRequest = { expandedReplay = false }) {
                             allFiles?.forEach { fileName ->
                                 val elems = fileName.name.split("-", "T", ":")
                                 val sizeKb = fileName.length()/1024
                                 val isLarge = sizeKb > 1024
                                 val prettyName = "${elems[4]}-${elems[5]}-${elems[6]} ${elems[7]}:${elems[8]} (${sizeKb}kB)"
                                 DropdownMenuItem(onClick = {
-                                    val intent = Intent(context, NavigationViewActivity::class.java)
+                                    val intent = Intent(context, NavigationReplayFromFileActivity::class.java)
                                     intent.putExtra("fileName", fileName.name)
                                     context.startActivity(intent)
                                 }) {
@@ -75,6 +78,19 @@ class MainActivity : ComponentActivity() {
                                         Text(text = prettyName)
                                     }
                                 }
+                            }
+                        }
+                    }
+                    Box(modifier = Modifier
+                        .fillMaxSize()
+                        .wrapContentSize(Alignment.Center)) {
+
+                        DropdownMenu(expanded = expandedNavigation, onDismissRequest = { expandedNavigation = false }) {
+                            Button(onClick = {
+                                val intent = Intent(context, TurnByTurnActivity::class.java)
+                                context.startActivity(intent)
+                            }) {
+                                Text(text = "Use default settings")
                             }
                         }
                     }

@@ -24,7 +24,7 @@ class UseGpsOnlyEngine(
     private val sensorDataModelDataSource: SensorDataModelDataSource,
     private val fusedLocationDataSource: LocationModelDataSource,
     private val coroutineScope: CoroutineScope,
-    private val fusedUpdatesDelayMs: Long = FUSED_UPDATES_DELAY_MS
+    private val fusedUpdatesDelayMs: Long
 ): UseCaseEngine {
 
     init {
@@ -47,10 +47,6 @@ class UseGpsOnlyEngine(
     }
 
     private var lastSensorUpdate = LocalDateTime.MIN
-
-    companion object {
-        const val FUSED_UPDATES_DELAY_MS = 100L
-    }
 
     private suspend fun processUpdate(location: LocationModel, sensorData: SensorDataModel){
         if (sensorData.type == SensorType.LINEAR_ACCELERATION && location.isValid()){
@@ -103,4 +99,5 @@ class UseGpsOnlyEngine(
     override fun getLastKnownLocation(): LocationModel {
         return this.fusedLocationDataSource.get()
     }
+
 }
