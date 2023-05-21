@@ -59,3 +59,26 @@ val navigationOptions = NavigationOptions.Builder(this)
 ### Using the provider
 
 TBD
+
+## Test app usage
+
+The application will not compile out-of-the-box as it requires some credentials tied to Mapbox.
+
+See https://docs.mapbox.com/android/navigation/guides/get-started/install/.
+
+First, you must add your Mapbox secret token to `gradle.properties`:
+
+```properties
+MAPBOX_DOWNLOADS_TOKEN=sk.ey...
+```
+
+Then, you must add your Mapbox API token under `app/src/main/res/values/mapbox.xml`:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mapbox_access_token">pk.ey...</string>
+</resources>
+```
+
+Finally, you should be able to compile the app using the standard `app` target in Android Studio.
