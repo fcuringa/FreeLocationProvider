@@ -1,6 +1,7 @@
 plugins {
     id 'com.android.library'
     id 'org.jetbrains.kotlin.android'
+    id 'maven-publish'
 }
 
 android {
@@ -13,6 +14,10 @@ android {
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles "consumer-rules.pro"
+    }
+
+    testFixtures {
+        enable = true
     }
 
     buildTypes {
@@ -29,6 +34,22 @@ android {
         jvmTarget = '1.8'
     }
 }
+
+publishing {
+    publications {
+        release(MavenPublication) {
+            groupId = 'dev.pwar'
+            artifactId = 'freelocationprovider-mapbox'
+            version = '0.1'
+
+            afterEvaluate {
+                from components.release
+            }
+        }
+    }
+}
+
+
 
 dependencies {
     implementation project(":FreeLocationProvider")
