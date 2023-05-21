@@ -1,5 +1,5 @@
 jdk:
   - openjdk11
 install:
-  - echo "Running a custom install command"
+  - echo "Running a custom install command $TEST_SECRET"
   - ./gradlew clean FreeLocationProviderMapbox:publishReleasePublicationToMavenLocal -xtest
