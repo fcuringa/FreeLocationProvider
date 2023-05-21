@@ -38,8 +38,8 @@ android {
 publishing {
     publications {
         release(MavenPublication) {
-            groupId = 'dev.pwar'
-            artifactId = 'freelocationprovider-mapbox'
+            groupId = 'com.github.fcuringa'
+            artifactId = 'FreeLocationProvider:FreeLocationProviderMapbox'
             version = '0.1'
 
             afterEvaluate {
