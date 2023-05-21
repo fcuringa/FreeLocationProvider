@@ -44,7 +44,7 @@ class FreeLocationProvider(
             FUSED_LINEAR_ACCELERATION
         }
         class Builder() {
-            private var engineType: EngineType = EngineType.GPS_INTERPOLATION
+            private var engineType: EngineType = EngineType.FUSED_LINEAR_ACCELERATION
             private var sampleTimeLocationUpdateMs: Long = FUSED_UPDATES_DELAY_MS
 
             fun engineType(type: EngineType): Builder {
