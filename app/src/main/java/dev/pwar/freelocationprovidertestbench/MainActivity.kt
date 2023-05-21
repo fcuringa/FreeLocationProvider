@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.*
 import androidx.compose.runtime.getValue
@@ -25,6 +26,38 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        val locationPermissionRequest = registerForActivityResult(
+            ActivityResultContracts.RequestMultiplePermissions()
+        ) { permissions ->
+            when {
+                permissions.getOrDefault(
+                    android.Manifest.permission.ACCESS_FINE_LOCATION,
+                    false
+                ) -> {
+                    // Precise location access granted.
+                }
+
+                permissions.getOrDefault(
+                    android.Manifest.permission.ACCESS_COARSE_LOCATION,
+                    false
+                ) -> {
+                    // Only approximate location access granted.
+                }
+
+                else -> {
+                    // No location access granted.
+                }
+            }
+        }
+
+        locationPermissionRequest.launch(
+            arrayOf(
+                android.Manifest.permission.ACCESS_FINE_LOCATION,
+                android.Manifest.permission.ACCESS_COARSE_LOCATION
+            )
+        )
+
 
         val logDirName = "${this.applicationInfo.dataDir}/files/.FreeLocationProvider"
         val allFiles = File(logDirName).listFiles()?.asList()?.takeLast(100)
