@@ -1,5 +1,6 @@
 package dev.pwar.freelocationprovider.usecase
 
+import android.hardware.SensorManager
 import android.util.Log
 import dev.pwar.freelocationprovider.data.LocationModelDataSource
 import dev.pwar.freelocationprovider.data.SensorDataModelDataSource
@@ -24,26 +25,59 @@ class UseGpsLinearAccelKalmanEngine(
     private val fusedUpdatesDelayMs: Long
 ) : UseCaseEngine {
     private var cachedLocation = LocationModel.DEFAULT_LOCATION_MODEL
+    private var cachedOrientationVector: List<Double> = emptyList()
+    private var accBearingDiff = 0.0
 
     init {
         coroutineScope.launch {
             var lastGyroUpdate = LocalDateTime.MIN
             sensorDataModelDataSource.getFlow()
-                .filter { it.type == SensorType.GYROSCOPE }
+                .filter { it.type == SensorType.GAME_ROTATION_VECTOR }
                 .collect {
                     val fusedLoc = fusedLocationDataSource.get()
                     if (lastGyroUpdate == LocalDateTime.MIN){
                         lastGyroUpdate = it.timestamp
                     }
                     if (fusedLoc.isValid()){
-                        val dt = ChronoUnit.MILLIS.between(lastGyroUpdate, it.timestamp) / 1000.0
-                        val newFusedLoc = fusedLoc.copy(
-                            bearing = fusedLoc.bearing + dt - it.y * 180/ PI
+                        val rotMatrix = FloatArray(9)
+                        SensorManager.getRotationMatrixFromVector(
+                            rotMatrix, floatArrayOf(it.x.toFloat(), it.y.toFloat(),
+                                it.z.toFloat(), it.extra.toFloat())
                         )
+                        val orientationAngles = FloatArray(3)
+                        SensorManager.getOrientation(rotMatrix, orientationAngles)
+                        val orientationVector = orientationAngles.map { it.toDouble() }
 
-                        fusedLocationDataSource.set(newFusedLoc)
-                        Log.d("UseGpsLinearAccelKalmanEngine",
-                            "Gyro update of fused loc: $newFusedLoc")
+                        if (cachedOrientationVector.isNotEmpty()){
+                            Log.d(
+                                "UseGpsLinearAccelKalmanEngine",
+                                "Vehicle orientation: ${orientationVector.map { it*180/ PI }}"
+                            )
+                            Log.d(
+                                "UseGpsLinearAccelKalmanEngine",
+                                "Vehicle orientation cached: ${cachedOrientationVector.map { it*180/ PI }}"
+                            )
+                            val bearingDiff = orientationVector[0] - cachedOrientationVector[0]
+
+                            val newCachedLoc = cachedLocation.copy(
+                                bearing = cachedLocation.bearing + (bearingDiff * 180.0/PI)
+                            )
+                            val newFusedLoc = fusedLoc.copy(
+                                bearing = fusedLoc.bearing + (bearingDiff * 180.0/PI)
+                            )
+
+                            fusedLocationDataSource.set(newFusedLoc)
+
+                            accBearingDiff += (bearingDiff * 180.0/PI)
+
+                            cachedLocation = newCachedLoc
+                            Log.d("UseGpsLinearAccelKalmanEngine",
+                                "Sensor update of fused loc: $newCachedLoc")
+                            Log.d("UseGpsLinearAccelKalmanEngine",
+                                "Vehicle orientation bearing diff (acc): ${bearingDiff * 180.0/PI}")
+                        }
+                        cachedOrientationVector = orientationVector
+
                     }
 
                     lastGyroUpdate = it.timestamp
@@ -66,7 +100,19 @@ class UseGpsLinearAccelKalmanEngine(
                     if (sensorData.type == SensorType.LINEAR_ACCELERATION) cachedSensorDataLinAcc =
                         sensorData
 
-                    if (gpsLoc != cachedLocation) {
+                    if (gpsLoc.timestamp != cachedLocation.timestamp) {
+                        // New location from GPS chip
+                        val lastEmittedDiffState = locationModelToState(fusedLocationDataSource.get().minus(cachedLocation))
+                        val newGpsDiffState = locationModelToState(gpsLoc.minus(cachedLocation))
+                        if (newGpsDiffState[0] != 0.0 && newGpsDiffState[1] != 0.0){
+                            val errX = (newGpsDiffState[0]-lastEmittedDiffState[0])/(newGpsDiffState[0])
+                            val errY = (newGpsDiffState[1]-lastEmittedDiffState[1])/(newGpsDiffState[1])
+
+                            accBearingDiff = 0.0
+                        }
+
+                        Log.d("UseGpsLinearAccelKalmanEngine",
+                            "New location from GPS: $gpsLoc")
                         cachedLocation = gpsLoc
                         processUpdate(gpsLoc, cachedSensorDataLinAcc)
                     } else {
@@ -118,6 +164,7 @@ class UseGpsLinearAccelKalmanEngine(
             )
             return
         }
+
         if (lastSensorUpdate == LocalDateTime.MIN) {
             lastSensorUpdate = sensorData.timestamp
         }
@@ -145,8 +192,8 @@ class UseGpsLinearAccelKalmanEngine(
         )
 
         // H matrix
-        val matH = if (ChronoUnit.MILLIS.between(cachedLocation.timestamp, sensorData.timestamp) > 1500) {
-            SimpleMatrix.diag(0.0, 0.0, 0.0, 0.0)
+        val matH = if (ChronoUnit.MILLIS.between(cachedLocation.timestamp, sensorData.timestamp) > 500) {
+            SimpleMatrix.identity(4)
         } else {
             SimpleMatrix.identity(4)
         }
@@ -173,7 +220,10 @@ class UseGpsLinearAccelKalmanEngine(
         )
 
         // R matrix, measurement noise. Set by time since last update
-        val sigmaXYSquare = 0.1
+        val timeDiffSinceLastGpsMillis = max(ChronoUnit.MILLIS.between(cachedLocation.timestamp, sensorData.timestamp),1)
+        Log.d("UseGpsLinearAccelKalmanEngine", "Cached: $cachedLocation, sensor data: $sensorData")
+        Log.d("UseGpsLinearAccelKalmanEngine", "time diff since last GPS: $timeDiffSinceLastGpsMillis ms")
+        val sigmaXYSquare = 0.001 * timeDiffSinceLastGpsMillis
         val matR = SimpleMatrix(
             arrayOf(
                 doubleArrayOf(sigmaXYSquare, 0.0, 0.0, 0.0),
@@ -184,14 +234,11 @@ class UseGpsLinearAccelKalmanEngine(
         )
 
         // Input
-        // TODO find correct relation
-        val matU = SimpleMatrix(arrayOf(doubleArrayOf(
-            -sensorData.z * sin(location.bearing * PI/180),
-            -sensorData.z * cos(location.bearing * PI/180)
-        ))).transpose()
+        val matU = getMatU(sensorData, location)
 
         Log.d("UseGpsLinearAccelKalmanEngine", "dt: $dt")
         Log.d("UseGpsLinearAccelKalmanEngine", "Input: $matU")
+        Log.d("UseGpsLinearAccelKalmanEngine", "Input raw: $sensorData, $location")
         Log.d("UseGpsLinearAccelKalmanEngine", "State: $globalX")
 
         /*
@@ -205,7 +252,7 @@ class UseGpsLinearAccelKalmanEngine(
         val matPPrediction = (matA.mult(globalMatP).mult(matA.transpose())).plus(matQ)
 
         // Step 2 - Measure, correct
-        val matZ = locationModelToState(cachedLocation)
+        val matZ = locationModelToState(location)
         val matY = matZ.minus(matH.mult(matXPrediction))
         val matS = (matH.mult(matPPrediction).mult(matH.transpose())).plus(matR)
 
@@ -218,7 +265,9 @@ class UseGpsLinearAccelKalmanEngine(
         // Update P
         val newMatP = matPPrediction.minus((matK.mult(matH).mult(matPPrediction)))
 
-        val newLocation = stateToLocationModel(newMatX, sensorData.timestamp)
+        val newLocation = stateToLocationModel(newMatX, sensorData.timestamp).copy(
+            bearing = location.bearing
+        )
         val predictedLocation = stateToLocationModel(matXPrediction, sensorData.timestamp)
 
         // Log
@@ -236,6 +285,18 @@ class UseGpsLinearAccelKalmanEngine(
         lastSensorUpdate = sensorData.timestamp
 
         fusedLocationDataSource.set(newLocation)
+    }
+
+    /**
+     * Get the input matrix U from the measurements
+     * TODO handle device orientation properly
+     *
+     */
+    private fun getMatU(sensorData: SensorDataModel, location: LocationModel): SimpleMatrix {
+        return SimpleMatrix(arrayOf(doubleArrayOf(
+            -sensorData.z * sin(location.bearing * PI/180) + sensorData.x * cos(location.bearing * PI/180),
+            -sensorData.z * cos(location.bearing * PI/180) + sensorData.x * cos(location.bearing * PI/180)
+        ))).transpose()
     }
 
     override suspend fun feedGpsLocation(location: LocationModel) {

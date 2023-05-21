@@ -34,6 +34,6 @@ data class LocationModel(
     }
 
     fun isValid(): Boolean{
-        return this != DEFAULT_LOCATION_MODEL
+        return this != DEFAULT_LOCATION_MODEL && bearing != 0.0
     }
 }

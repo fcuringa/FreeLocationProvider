@@ -38,6 +38,8 @@ import com.mapbox.navigation.base.TimeFormat
 import com.mapbox.navigation.base.extensions.applyDefaultNavigationOptions
 import com.mapbox.navigation.base.extensions.applyLanguageAndVoiceUnitOptions
 import com.mapbox.navigation.base.formatter.DistanceFormatterOptions
+import com.mapbox.navigation.base.options.DeviceProfile
+import com.mapbox.navigation.base.options.DeviceType
 import com.mapbox.navigation.base.options.NavigationOptions
 import com.mapbox.navigation.base.route.NavigationRoute
 import com.mapbox.navigation.base.route.NavigationRouterCallback
@@ -92,7 +94,10 @@ import dev.pwar.freelocationprovidermapbox.FreeLocationProviderMapboxEngine
 import dev.pwar.freelocationprovidertestbench.databinding.MapboxActivityTurnByTurnBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.transform
 import kotlinx.coroutines.launch
+import java.io.File
 import java.time.LocalDateTime
 import java.util.Date
 import java.util.Locale
@@ -134,10 +139,7 @@ class TurnByTurnActivity : AppCompatActivity() {
      */
     private val mapboxReplayer = MapboxReplayer()
 
-    private val locationProvider = FreeLocationProvider.Builder.Builder()
-        .engineType(FreeLocationProvider.Builder.EngineType.FUSED_LINEAR_ACCELERATION)
-        .sampleTimeLocationUpdate(1000)
-        .build()
+
 
     /**
      * Debug tool that mocks location updates with an input from the [mapboxReplayer].
@@ -336,6 +338,8 @@ class TurnByTurnActivity : AppCompatActivity() {
         }
     }
 
+    private var gpsLocationModel: LocationModel = LocationModel.DEFAULT_LOCATION_MODEL
+
     /**
      * Gets notified with location updates.
      *
@@ -347,10 +351,17 @@ class TurnByTurnActivity : AppCompatActivity() {
 
         override fun onNewRawLocation(rawLocation: Location) {
             // not handled
-            Log.d("onNewRawLocation", "Got $rawLocation")
+            Log.d("onNewRawLocation", "Got $rawLocation (${rawLocation.time})")
             val pointAnnotationOptionsRaw: PointAnnotationOptions = PointAnnotationOptions()
                 // Define a geographic coordinate.
                 .withPoint(Point.fromLngLat(rawLocation.longitude, rawLocation.latitude))
+                // Specify the bitmap you assigned to the point annotation
+                // The bitmap will be added to map style automatically.
+                .withIconImage(bitmapFromDrawableRes(this@TurnByTurnActivity, R.drawable.baseline_blue_place_24)!!)
+
+            val pointAnnotationOptionsPureGps: PointAnnotationOptions = PointAnnotationOptions()
+                // Define a geographic coordinate.
+                .withPoint(Point.fromLngLat(gpsLocationModel.longitude, gpsLocationModel.latitude))
                 // Specify the bitmap you assigned to the point annotation
                 // The bitmap will be added to map style automatically.
                 .withIconImage(bitmapFromDrawableRes(this@TurnByTurnActivity, R.drawable.baseline_place_24)!!)
@@ -359,6 +370,7 @@ class TurnByTurnActivity : AppCompatActivity() {
                 GlobalScope.launch(Dispatchers.Main) {
                     pointAnnotationManager.deleteAll()
                     pointAnnotationManager.create(pointAnnotationOptionsRaw)
+                    pointAnnotationManager.create(pointAnnotationOptionsPureGps)
                 }
             }
 
@@ -635,26 +647,59 @@ class TurnByTurnActivity : AppCompatActivity() {
     }
 
     private fun initNavigation() {
+        val bundle = intent.extras
+
+        val fileName = bundle?.getString("fileName")
+        val replayFile = if (fileName != null){
+            File("${this.applicationInfo.dataDir}/files/.FreeLocationProvider/$fileName")
+        } else {
+            null
+        }
+
+        val isFused = bundle?.getBoolean("isFused")  != false
+
+        val engineType = if(isFused){
+            FreeLocationProvider.Builder.EngineType.FUSED_LINEAR_ACCELERATION
+        } else {
+            FreeLocationProvider.Builder.EngineType.GPS_INTERPOLATION
+        }
+
+        Toast.makeText(this,
+            if (replayFile != null) "Replaying $fileName (${engineType.name})"
+            else "Tracking started (${engineType.name})",
+            Toast.LENGTH_LONG
+        ).show()
+
+        val locationProvider = FreeLocationProvider.Builder.Builder()
+            .engineType(engineType)
+            .sampleTimeLocationUpdate(if (isFused) {200} else {1000})
+            .build()
+
+        GlobalScope.launch(Dispatchers.IO) {
+            locationProvider.getRawLocationFlow().transform<LocationModel,Nothing> {
+                gpsLocationModel = it
+            }.collect()
+        }
+
+        // Create and initialize engine
         val engine = FreeLocationProviderMapboxEngine(
             context = this,
             provider = locationProvider,
-        )
+        ).apply {
+            initialize(replayFile = replayFile)
+        }
+
         MapboxNavigationApp.setup(
             NavigationOptions.Builder(this)
                 .accessToken(getString(R.string.mapbox_access_token))
-
-                // comment out the location engine setting block to disable simulation
-                .locationEngine(FreeLocationProviderMapboxEngine(
-                    context = this,
-                    provider = locationProvider,
-                ))
+                .locationEngine(engine)
                 .build()
         )
 
-        binding.useGpsCheckbox.setOnCheckedChangeListener { compoundButton, isChecked ->
+        // Handle GPS checkbox
+        binding.useGpsCheckbox.setOnCheckedChangeListener { _, isChecked ->
             engine.gpsUpdateAllowed = isChecked
         }
-
         binding.useGpsCheckbox.isChecked = true
 
         // initialize location puck

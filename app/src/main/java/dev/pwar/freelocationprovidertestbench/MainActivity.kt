@@ -12,9 +12,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.PopupProperties
 import dev.pwar.freelocationprovidertestbench.ui.theme.FreeLocationProviderTestBenchTheme
 import java.io.File
 
@@ -23,8 +26,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val logDirName = "${this.applicationInfo.dataDir}/datalog"
-        val allFiles = File(logDirName).listFiles()?.asList()?.takeLast(20)
+        val logDirName = "${this.applicationInfo.dataDir}/files/.FreeLocationProvider"
+        val allFiles = File(logDirName).listFiles()?.asList()?.takeLast(100)
         setContent {
             val context = LocalContext.current
             FreeLocationProviderTestBenchTheme {
@@ -37,55 +40,92 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colors.background
                 ) {
-                    Column(
-                        verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.fillMaxSize()
                     ) {
-                        Text(text = "Welcome to the Free Location Provider test bench")
-                        Spacer(modifier = Modifier.size(50.dp))
-                        Button(onClick = {
-                            context.startActivity(Intent(context, DataCollectActivity::class.java))
-                        }) {
-                            Text("Start Collecting data")
+                        Column(
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(text = "Welcome to the Free Location Provider test bench")
+                            Spacer(modifier = Modifier.size(50.dp))
+                            Button(onClick = {
+                                context.startActivity(
+                                    Intent(
+                                        context,
+                                        DataCollectActivity::class.java
+                                    )
+                                )
+                            }) {
+                                Text("Start Collecting data")
+                            }
+                            Button(onClick = {
+                                context.startActivity(
+                                    Intent(
+                                        context,
+                                        SensorReadingActivity::class.java
+                                    )
+                                )
+                            }) {
+                                Text("View sensors")
+                            }
+                            Button(onClick = {
+                                expandedReplay = true
+                            }) {
+                                Text("Start Replaying data from file...")
+                            }
+                            Button(onClick = { expandedNavigation = true }) {
+                                Text(text = "Start navigating...")
+                            }
                         }
-                        Button(onClick = {
-                            expandedReplay = true
-                        }) {
-                            Text("Start Replaying data from file...")
-                        }
-                        Button(onClick = { expandedNavigation = true }) {
-                            Text(text = "Start navigating...")
-                        }
-                    }
-                    Box(modifier = Modifier
-                        .fillMaxSize()
-                        .wrapContentSize(Alignment.Center)) {
-
-                        DropdownMenu(expanded = expandedReplay, onDismissRequest = { expandedReplay = false }) {
-                            allFiles?.forEach { fileName ->
-                                val elems = fileName.name.split("-", "T", ":")
-                                val sizeKb = fileName.length()/1024
-                                val isLarge = sizeKb > 1024
-                                val prettyName = "${elems[4]}-${elems[5]}-${elems[6]} ${elems[7]}:${elems[8]} (${sizeKb}kB)"
-                                DropdownMenuItem(onClick = {
-                                    val intent = Intent(context, NavigationReplayFromFileActivity::class.java)
-                                    intent.putExtra("fileName", fileName.name)
-                                    context.startActivity(intent)
-                                }) {
-                                    if (isLarge){
-                                        Text(text = prettyName, fontWeight = FontWeight.Bold)
-                                    } else {
-                                        Text(text = prettyName)
+                        Box(
+                            modifier = Modifier.fillMaxHeight(),
+                        ) {
+                            DropdownMenu(
+                                expanded = expandedReplay,
+                                onDismissRequest = { expandedReplay = false },
+                            ) {
+                                allFiles?.forEach { fileName ->
+                                    val elems = fileName.name.split("-", "T", ":")
+                                    if (elems.size >= 9) {
+                                        val sizeKb = fileName.length() / 1024
+                                        val isLarge = sizeKb > 1024
+                                        val prettyName =
+                                            "${elems[4]}-${elems[5]}-${elems[6]} ${elems[7]}:${elems[8]} (${sizeKb}kB)"
+                                        DropdownMenuItem(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            onClick = {
+                                                val intent =
+                                                    Intent(context, TurnByTurnActivity::class.java)
+                                                intent.putExtra("fileName", fileName.name)
+                                                intent.putExtra("isFused", true)
+                                                context.startActivity(intent)
+                                            }) {
+                                            if (isLarge) {
+                                                Text(
+                                                    text = prettyName,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            } else {
+                                                Text(text = prettyName)
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                    Box(modifier = Modifier
-                        .fillMaxSize()
-                        .wrapContentSize(Alignment.Center)) {
 
-                        DropdownMenu(expanded = expandedNavigation, onDismissRequest = { expandedNavigation = false }) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .wrapContentSize(Alignment.Center)
+                    ) {
+
+                        DropdownMenu(
+                            expanded = expandedNavigation,
+                            onDismissRequest = { expandedNavigation = false }) {
                             Button(onClick = {
                                 val intent = Intent(context, TurnByTurnActivity::class.java)
                                 context.startActivity(intent)

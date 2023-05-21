@@ -6,4 +6,5 @@ enum class SensorType {
     GYROSCOPE,
     GRAVITY,
     LINEAR_ACCELERATION,
+    GAME_ROTATION_VECTOR
 }

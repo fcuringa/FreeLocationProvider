@@ -23,8 +23,10 @@ import com.mapbox.android.core.location.LocationEngineResult
 import dev.pwar.freelocationprovider.FreeLocationProvider
 import dev.pwar.freelocationprovider.interfaces.LocationModelInterface
 import dev.pwar.freelocationprovider.mapper.locationModelFromLocationMapper
+import dev.pwar.freelocationprovider.mapper.locationModelFromLogLineMapper
 import dev.pwar.freelocationprovider.mapper.locationModelInterfaceToLocationModelMapper
 import dev.pwar.freelocationprovider.mapper.locationModelToLocationModelInterfaceMapper
+import dev.pwar.freelocationprovider.mapper.sensorDataModelFromLogLine
 import dev.pwar.freelocationprovider.mapper.sensorDataModelFromSensorEvent
 import dev.pwar.freelocationprovidermapbox.interfaces.locationModelToLocationMapper
 import kotlinx.coroutines.*
@@ -35,7 +37,7 @@ import java.time.LocalDateTime
 import java.time.ZoneOffset
 
 class FreeLocationProviderMapboxEngine(
-    context: Activity,
+    private val context: Activity,
     private val provider: FreeLocationProvider,
     private val coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.IO),
     private val isDebugEnabled: Boolean = true,
@@ -48,101 +50,7 @@ class FreeLocationProviderMapboxEngine(
     }
 
     var gpsUpdateAllowed = true
-
-    init {
-        if (isDebugEnabled) {
-            logFile.parentFile?.mkdir()
-            logFile.createNewFile()
-            logFile.parentFile?.listFiles()?.forEach {
-                Log.d(LOG_TAG, "Checking if ${it.name} should be deleted...")
-                val timeDiffSeconds = LocalDateTime.now().toEpochSecond(ZoneOffset.UTC) - it.lastModified()/1000.0f
-                if(timeDiffSeconds > 14 * 24 * 3600) {
-                    it.delete()
-                    Log.d(LOG_TAG, "Deleted $it, was created $timeDiffSeconds seconds ago")
-                } else {
-                    Log.d(LOG_TAG, "Kept $it, was created $timeDiffSeconds seconds ago")
-                }
-            }
-        }
-
-        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        val gravitySensor = sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
-        val linAccSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
-        val rotVecSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
-        val accelSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-        val gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
-        val rotVector = sensorManager.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
-
-        // Listen to sensors
-        sensorManager.registerListener(this, gravitySensor, SensorManager.SENSOR_DELAY_UI)
-        sensorManager.registerListener(this, linAccSensor, SensorManager.SENSOR_DELAY_UI)
-        sensorManager.registerListener(this, rotVecSensor, SensorManager.SENSOR_DELAY_UI)
-        sensorManager.registerListener(this, accelSensor, SensorManager.SENSOR_DELAY_UI)
-        sensorManager.registerListener(this, gyroSensor, SensorManager.SENSOR_DELAY_UI)
-        sensorManager.registerListener(this, rotVector, SensorManager.SENSOR_DELAY_UI)
-
-        if (ActivityCompat.checkSelfPermission(
-                context,
-                ACCESS_FINE_LOCATION
-            ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
-                context,
-                Manifest.permission.ACCESS_COARSE_LOCATION
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            throw Exception("Missing permission, make sure ACCESS_FINE_LOCATION has been granted" +
-                    "before initializing this class")
-        }
-
-        // Load from cache if possible
-        try {
-            locationCacheFile.readText().apply {
-                val cachedLocation = LocationModelInterface.loadFromString(this)
-                coroutineScope.launch {
-                    provider.feedSimulatedLocation(locationModelInterfaceToLocationModelMapper(cachedLocation))
-                }
-                Log.d(LOG_TAG, "Loaded location from cache: $cachedLocation")
-            }
-        } catch (err: Exception) {
-            Log.d(LOG_TAG, "Could not load location from cache: $err")
-        }
-
-        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 500, 0.0f) {
-            Log.d(LOG_TAG, "GPS provider: $it")
-            if (isDebugEnabled) logPosition(it)
-            if (!gpsUpdateAllowed){
-                Log.d(LOG_TAG, "GPS update was rejected due to not being allowed by user")
-                return@requestLocationUpdates
-            }
-            coroutineScope.launch {
-                Log.d(LOG_TAG, "GPS update allowed, feeding provider")
-                provider.feedSimulatedLocation(
-                    locationModelFromLocationMapper(it)
-                )
-            }
-        }
-
-        // Keep cache updated
-        coroutineScope.launch {
-            provider.getFusedLocationFlow()
-                .sample(5000) // Avoid writing too often
-                .flowOn(Dispatchers.IO)
-                .collect {
-                    try {
-                        if (!locationCacheFile.exists()){
-                            locationCacheFile.parentFile?.mkdir()
-                            locationCacheFile.createNewFile()
-                        }
-                        locationCacheFile.writeText(
-                            locationModelToLocationModelInterfaceMapper(it).dumpToJsonString()
-                        )
-                        Log.d(LOG_TAG, "Location cache was updated")
-                    } catch (err: Exception){
-                        Log.d(LOG_TAG, "Could not create location cache: $err")
-                    }
-                }
-        }
-    }
+    private var curTime = LocalDateTime.MIN
 
     private val jobByCallback:
             MutableMap<LocationEngineCallback<LocationEngineResult>, Job> = mutableMapOf()
@@ -164,7 +72,7 @@ class FreeLocationProviderMapboxEngine(
             provider.getFusedLocationFlow().collect {
                 Log.d(LOG_TAG, "requestLocationUpdates.collect -> $it")
                 callback.onSuccess(
-                    LocationEngineResult.create(locationModelToLocationMapper(it))
+                    LocationEngineResult.create(locationModelToLocationMapper(it.copy(timestamp = LocalDateTime.now())))
                 )
             }
         }
@@ -224,6 +132,161 @@ class FreeLocationProviderMapboxEngine(
 
     override fun onAccuracyChanged(p0: Sensor?, p1: Int) {
         // TODO pass this data to the provider
+    }
+
+    /**
+     * Initializes the engine, this is required for the tracking to start. It can only be done once.
+     * By default, it will use the GPS and sensors to track the location. Alternatively, a replay
+     * file can be passed.
+     *
+     * @param replayFile File to read the replay data from. Leave null to not use replay mode
+     */
+    fun initialize(replayFile: File? = null){
+        Log.d(LOG_TAG, "Initializing the engine")
+        if (replayFile == null){
+            if (isDebugEnabled) {
+                logFile.parentFile?.mkdir()
+                logFile.createNewFile()
+                logFile.parentFile?.listFiles()?.forEach {
+                    Log.d(LOG_TAG, "Checking if ${it.name} should be deleted...")
+                    val timeDiffSeconds = LocalDateTime.now().toEpochSecond(ZoneOffset.UTC) - it.lastModified()/1000.0f
+                    if(timeDiffSeconds > 14 * 24 * 3600) {
+                        it.delete()
+                        Log.d(LOG_TAG, "Deleted $it, was created $timeDiffSeconds seconds ago")
+                    } else {
+                        Log.d(LOG_TAG, "Kept $it, was created $timeDiffSeconds seconds ago")
+                    }
+                }
+            }
+
+            // Not replay mode, use actual sensors
+            val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+            val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+            val gravitySensor = sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
+            val linAccSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
+            val rotVecSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+            val accelSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+            val gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+            val rotVector = sensorManager.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
+
+            // Listen to sensors
+            sensorManager.registerListener(this, gravitySensor, SensorManager.SENSOR_DELAY_UI)
+            sensorManager.registerListener(this, linAccSensor, SensorManager.SENSOR_DELAY_UI)
+            sensorManager.registerListener(this, rotVecSensor, SensorManager.SENSOR_DELAY_UI)
+            sensorManager.registerListener(this, accelSensor, SensorManager.SENSOR_DELAY_UI)
+            sensorManager.registerListener(this, gyroSensor, SensorManager.SENSOR_DELAY_UI)
+            sensorManager.registerListener(this, rotVector, SensorManager.SENSOR_DELAY_UI)
+
+            if (ActivityCompat.checkSelfPermission(
+                    context,
+                    ACCESS_FINE_LOCATION
+                ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                throw Exception("Missing permission, make sure ACCESS_FINE_LOCATION has been granted" +
+                        "before initializing this class")
+            }
+
+            // Load from cache if possible
+            try {
+                locationCacheFile.readText().apply {
+                    val cachedLocation = LocationModelInterface.loadFromString(this)
+                    coroutineScope.launch {
+                        provider.feedSimulatedLocation(locationModelInterfaceToLocationModelMapper(cachedLocation))
+                    }
+                    Log.d(LOG_TAG, "Loaded location from cache: $cachedLocation")
+                }
+            } catch (err: Exception) {
+                Log.d(LOG_TAG, "Could not load location from cache: $err")
+            }
+
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 500, 0.0f) {
+                Log.d(LOG_TAG, "GPS provider: $it")
+                if (isDebugEnabled) logPosition(it)
+                if (!gpsUpdateAllowed){
+                    Log.d(LOG_TAG, "GPS update was rejected due to not being allowed by user")
+                    return@requestLocationUpdates
+                }
+                coroutineScope.launch {
+                    Log.d(LOG_TAG, "GPS update allowed, feeding provider")
+                    provider.feedSimulatedLocation(
+                        locationModelFromLocationMapper(it)
+                    )
+                }
+            }
+
+            // Keep cache updated
+            coroutineScope.launch {
+                provider.getFusedLocationFlow()
+                    .sample(5000) // Avoid writing too often
+                    .flowOn(Dispatchers.IO)
+                    .collect {
+                        try {
+                            if (!locationCacheFile.exists()){
+                                locationCacheFile.parentFile?.mkdir()
+                                locationCacheFile.createNewFile()
+                            }
+                            locationCacheFile.writeText(
+                                locationModelToLocationModelInterfaceMapper(it).dumpToJsonString()
+                            )
+                            Log.d(LOG_TAG, "Location cache was updated")
+                        } catch (err: Exception){
+                            Log.d(LOG_TAG, "Could not create location cache: $err")
+                        }
+                    }
+            }
+        } else {
+            // Replay mode
+            if (!replayFile.exists()) throw Exception("Replay file does not exist")
+            coroutineScope.launch {
+                val reader = replayFile.bufferedReader()
+                var hasReceiverFirstPosition = false
+                for (line in reader.lineSequence()) {
+                    // Try to feed sensor data if line is such
+                    if (hasReceiverFirstPosition){
+                        try {
+                            val sensorDataModel = sensorDataModelFromLogLine(line)
+                            waitUntil(sensorDataModel.timestamp)
+                            provider.feedSimulatedSensor(sensorDataModel)
+                            Log.d("handleFile", "Fed sensor data $sensorDataModel")
+                        } catch (_: Error) {
+                        }
+                    }
+
+
+                    // Try to feed position data if line is such
+                    try {
+                        val locationModel = locationModelFromLogLineMapper(line)
+
+                        waitUntil(locationModel.timestamp)
+
+                        // Time to apply
+                        if (gpsUpdateAllowed || !hasReceiverFirstPosition){
+                            provider.feedSimulatedLocation(locationModel)
+                            Log.d("handleFile", "Fed location $locationModel")
+                            hasReceiverFirstPosition = true
+                        }
+                    } catch (_: Error) {
+                    }
+                }
+                reader.close()
+            }
+        }
+
+    }
+
+    suspend fun waitUntil(time: LocalDateTime) {
+        if (curTime == LocalDateTime.MIN) {
+            curTime = time
+        }
+
+        println("Currently $curTime, waiting for ${time}...")
+        while (curTime < time) {
+            delay(4)
+            curTime = curTime.plusNanos(5_000_000)
+        }
     }
 
 }

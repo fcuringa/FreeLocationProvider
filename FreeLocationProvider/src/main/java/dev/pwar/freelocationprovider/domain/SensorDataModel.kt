@@ -7,7 +7,8 @@ data class SensorDataModel(
     val type: SensorType,
     val x: Double,
     val y: Double,
-    val z: Double
+    val z: Double,
+    val extra: Double = 0.0     // Only used for Game rotation vector
 ) {
     companion object {
         val SENSOR_DATA_MODEL_DEFAULT = SensorDataModel(
