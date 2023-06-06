@@ -14,10 +14,6 @@ for the default GPS provider included in Android's `LocationManager`. This is ac
 3. Offering a full Kotlin-Flow-based API with minimal configuration, in addition to some built-in
    integration with popular Navigation libraries (currently limited to Mapbox).
 
-## Installation
-
-TBD.
-
 ## Structure
 
 The project is built around several modules:
@@ -26,6 +22,44 @@ The project is built around several modules:
 - `FreeLocationProviderMapbox`: Mapbox Engine to ease Mapbox Navigation integration,
 - `app`: An application to test the provider accuracy in several use cases - supports navigating 
   "In real life" using the GPS as well as replaying some recorded trip. Requires a Mapbox token.
+
+## Installation
+
+All artifacts are uploaded in Maven Central.
+
+Make sure you set it up in your project's `settings.gradle`.
+
+```groovy
+pluginManagement {
+    repositories {
+        mavenCentral()
+        // ...
+    }
+}
+dependencyResolutionManagement {
+    repositories {
+        mavenCentral()
+        // ...
+    }
+}
+// ...
+```
+
+### Base provider - `FreeLocationProvider`
+
+Add the dependency in your app's `build.gradle`:
+
+```groovy
+implementation 'com.github.fcuringa:freelocationprovider:0.1.0'
+```
+
+### Mapbox engine - `FreeLocationProviderMapbox`
+
+Add the dependency in your app's `build.gradle`:
+
+```groovy
+implementation 'com.github.fcuringa:freelocationprovider-mapbox:0.1.0'
+```
 
 ## API usage
 
