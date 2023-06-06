@@ -192,11 +192,7 @@ class UseGpsLinearAccelKalmanEngine(
         )
 
         // H matrix
-        val matH = if (ChronoUnit.MILLIS.between(cachedLocation.timestamp, sensorData.timestamp) > 500) {
-            SimpleMatrix.identity(4)
-        } else {
-            SimpleMatrix.identity(4)
-        }
+        val matH = SimpleMatrix.identity(4)
 
         // Q matrix, process noise
         val sigmaASquare = 0.1    // Estimate of acceleration std dev (squared)
@@ -294,8 +290,8 @@ class UseGpsLinearAccelKalmanEngine(
      */
     private fun getMatU(sensorData: SensorDataModel, location: LocationModel): SimpleMatrix {
         return SimpleMatrix(arrayOf(doubleArrayOf(
-            -sensorData.z * sin(location.bearing * PI/180) + sensorData.x * cos(location.bearing * PI/180),
-            -sensorData.z * cos(location.bearing * PI/180) + sensorData.x * cos(location.bearing * PI/180)
+            -sensorData.z * sin(location.bearing * PI/180),
+            -sensorData.z * cos(location.bearing * PI/180)
         ))).transpose()
     }
 

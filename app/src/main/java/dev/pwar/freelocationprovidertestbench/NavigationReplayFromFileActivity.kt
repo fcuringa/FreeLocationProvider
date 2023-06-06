@@ -65,7 +65,7 @@ class NavigationReplayFromFileActivity : AppCompatActivity() {
                     val sensorDataModel = sensorDataModelFromLogLine(line)
                     waitUntil(sensorDataModel.timestamp)
 
-                    freeLocationProvider.feedSimulatedSensor(sensorDataModel)
+                    freeLocationProvider.feedSensor(sensorDataModel)
                     Log.d("handleFile", "Fed $sensorDataModel")
                 } catch (_: Error) {
                 }
@@ -77,7 +77,7 @@ class NavigationReplayFromFileActivity : AppCompatActivity() {
                     waitUntil(locationModel.timestamp)
 
                     // Time to apply
-                    freeLocationProvider.feedSimulatedLocation(locationModel)
+                    freeLocationProvider.feedLocation(locationModel)
                     Log.d("handleFile", "Fed $locationModel")
                 } catch (_: Error) {
                 }

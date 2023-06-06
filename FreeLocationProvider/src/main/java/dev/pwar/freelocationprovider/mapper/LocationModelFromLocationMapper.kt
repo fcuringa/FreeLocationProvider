@@ -10,10 +10,7 @@ import java.util.TimeZone
 
 fun locationModelFromLocationMapper(location: Location): LocationModel {
     return LocationModel(
-        timestamp = LocalDateTime.ofInstant(
-            Instant.ofEpochSecond(location.time/1000),
-            ZoneId.systemDefault()
-        ),
+        timestamp = LocalDateTime.now(),
         latitude = location.latitude,
         longitude = location.longitude,
         speed = location.speed.toDouble(),

@@ -10,16 +10,15 @@ import dev.pwar.freelocationprovider.usecase.UseGpsOnlyEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
-import kotlin.reflect.KClass
 
 class FreeLocationProvider(
     private val engine: UseCaseEngine
 ) {
-    suspend fun feedSimulatedLocation(location: LocationModel){
+    suspend fun feedLocation(location: LocationModel){
         this.engine.feedGpsLocation(location)
     }
 
-    suspend fun feedSimulatedSensor(sensorData: SensorDataModel) {
+    suspend fun feedSensor(sensorData: SensorDataModel) {
         this.engine.feedSensorData(sensorData)
     }
 

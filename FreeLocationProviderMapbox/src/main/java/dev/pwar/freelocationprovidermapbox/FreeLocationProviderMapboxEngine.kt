@@ -97,7 +97,7 @@ class FreeLocationProviderMapboxEngine(
     override fun onSensorChanged(p0: SensorEvent?) {
         if (p0 != null){
             coroutineScope.launch {
-                provider.feedSimulatedSensor(
+                provider.feedSensor(
                     sensorDataModelFromSensorEvent(p0)
                 )
             }
@@ -193,8 +193,8 @@ class FreeLocationProviderMapboxEngine(
             try {
                 locationCacheFile.readText().apply {
                     val cachedLocation = LocationModelInterface.loadFromString(this)
-                    coroutineScope.launch {
-                        provider.feedSimulatedLocation(locationModelInterfaceToLocationModelMapper(cachedLocation))
+                    coroutineScope.launch(Dispatchers.IO) {
+                        provider.feedLocation(locationModelInterfaceToLocationModelMapper(cachedLocation))
                     }
                     Log.d(LOG_TAG, "Loaded location from cache: $cachedLocation")
                 }
@@ -203,17 +203,15 @@ class FreeLocationProviderMapboxEngine(
             }
 
             locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 500, 0.0f) {
-                Log.d(LOG_TAG, "GPS provider: $it")
+                Log.d(LOG_TAG, "Update from GPS provider: $it")
                 if (isDebugEnabled) logPosition(it)
                 if (!gpsUpdateAllowed){
                     Log.d(LOG_TAG, "GPS update was rejected due to not being allowed by user")
                     return@requestLocationUpdates
                 }
-                coroutineScope.launch {
+                coroutineScope.launch(Dispatchers.IO) {
                     Log.d(LOG_TAG, "GPS update allowed, feeding provider")
-                    provider.feedSimulatedLocation(
-                        locationModelFromLocationMapper(it)
-                    )
+                    provider.feedLocation(locationModelFromLocationMapper(it))
                 }
             }
 
@@ -249,7 +247,7 @@ class FreeLocationProviderMapboxEngine(
                         try {
                             val sensorDataModel = sensorDataModelFromLogLine(line)
                             waitUntil(sensorDataModel.timestamp)
-                            provider.feedSimulatedSensor(sensorDataModel)
+                            provider.feedSensor(sensorDataModel)
                             Log.d("handleFile", "Fed sensor data $sensorDataModel")
                         } catch (_: Error) {
                         }
@@ -264,7 +262,7 @@ class FreeLocationProviderMapboxEngine(
 
                         // Time to apply
                         if (gpsUpdateAllowed || !hasReceiverFirstPosition){
-                            provider.feedSimulatedLocation(locationModel)
+                            provider.feedLocation(locationModel)
                             Log.d("handleFile", "Fed location $locationModel")
                             hasReceiverFirstPosition = true
                         }

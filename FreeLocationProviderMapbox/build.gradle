@@ -35,19 +35,6 @@ android {
     }
 }
 
-publishing {
-    publications {
-        release(MavenPublication) {
-            groupId = 'com.github.fcuringa.FreeLocationProvider'
-            artifactId = 'FreeLocationProviderMapbox'
-            version = '0.1'
-
-            afterEvaluate {
-                from components.release
-            }
-        }
-    }
-}
 
 
 
@@ -62,3 +49,25 @@ dependencies {
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
 }
+
+ext {
+    PUBLISH_GROUP_ID = 'io.github.fcuringa'
+    PUBLISH_VERSION = '0.1.0'
+    PUBLISH_ARTIFACT_ID = 'freelocationprovider-mapbox'
+    PUBLISH_DESCRIPTION = 'Location provider for Android - Mapbox integration'
+    PUBLISH_URL = 'https://github.com/fcuringa/FreeLocationProvider'
+    PUBLISH_LICENSE_NAME = 'Apache License'
+    PUBLISH_LICENSE_URL =
+            'https://github.com/fcuringa/FreeLocationProvider/blob/master/LICENSE'
+    PUBLISH_DEVELOPER_ID = 'fcuringa'
+    PUBLISH_DEVELOPER_NAME = 'Florian Curinga'
+    PUBLISH_DEVELOPER_EMAIL = 'pwar@pwar.dev'
+    PUBLISH_SCM_CONNECTION =
+            'scm:git:github.com/fcuringa/freelocationprovider.git'
+    PUBLISH_SCM_DEVELOPER_CONNECTION =
+            'scm:git:ssh://github.com/fcuringa/freelocationprovider.git'
+    PUBLISH_SCM_URL =
+            'https://github.com/fcuringa/freelocationprovider/tree/master'
+}
+
+apply from: "${rootProject.projectDir}/scripts/publish-module.gradle"
