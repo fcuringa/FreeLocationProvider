@@ -1,5 +1,6 @@
 package dev.pwar.freelocationprovider
 
+import android.content.Context
 import dev.pwar.freelocationprovider.domain.LocationModel
 import dev.pwar.freelocationprovider.domain.SensorDataModel
 import dev.pwar.freelocationprovider.framework.InMemoryLocationModelDataSource
@@ -7,6 +8,7 @@ import dev.pwar.freelocationprovider.framework.InMemorySensorDataModelDataSource
 import dev.pwar.freelocationprovider.usecase.UseCaseEngine
 import dev.pwar.freelocationprovider.usecase.UseGpsLinearAccelKalmanEngine
 import dev.pwar.freelocationprovider.usecase.UseGpsOnlyEngine
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -34,53 +36,80 @@ class FreeLocationProvider(
         return this.engine.getRawLocationFlow()
     }
 
-    companion object Builder {
-        const val FUSED_UPDATES_DELAY_MS = 20L
+    /**
+     * Builder for [FreeLocationProvider]
+     * @param context The activity context
+     */
+    class Builder(
+        private val context: Context
+    ){
 
         enum class EngineType {
-            INVALID,
-            GPS_INTERPOLATION,
-            FUSED_LINEAR_ACCELERATION
+            INVALID,            // Invalid engine type
+            GPS_EXTRAPOLATION,  // Uses GPS only, with basic extrapolation when signal is lost
+            FUSED               // Fused engine with GPS and sensors
         }
-        class Builder() {
-            private var engineType: EngineType = EngineType.FUSED_LINEAR_ACCELERATION
-            private var sampleTimeLocationUpdateMs: Long = FUSED_UPDATES_DELAY_MS
 
-            fun engineType(type: EngineType): Builder {
-                this.engineType = type
-                return this
-            }
+        /**
+         * Engine type to be used, defaults to [EngineType.FUSED], leave it as such except for
+         * debugging puposes.
+         */
+        var engineType: EngineType = EngineType.FUSED
 
-            fun sampleTimeLocationUpdate(sampleTimeMs: Long): Builder{
-                this.sampleTimeLocationUpdateMs = sampleTimeMs
-                return this
-            }
+        /**
+         * Delay between each update emitted by the engine in milliseconds
+         */
+        var sampleTimeLocationUpdateMs: Long = 1000L
 
-            fun build(): FreeLocationProvider {
-                when(this.engineType) {
-                    EngineType.GPS_INTERPOLATION -> {
-                        val engine = UseGpsOnlyEngine(
-                            gpsLocationDataSource = InMemoryLocationModelDataSource(),
-                            fusedLocationDataSource = InMemoryLocationModelDataSource(),
-                            sensorDataModelDataSource = InMemorySensorDataModelDataSource(),
-                            coroutineScope = CoroutineScope(Dispatchers.IO),
-                            fusedUpdatesDelayMs = this.sampleTimeLocationUpdateMs
-                        )
-                        return FreeLocationProvider(engine)
-                    }
-                    EngineType.FUSED_LINEAR_ACCELERATION -> {
-                        val engine = UseGpsLinearAccelKalmanEngine(
-                            gpsLocationDataSource = InMemoryLocationModelDataSource(),
-                            fusedLocationDataSource = InMemoryLocationModelDataSource(),
-                            sensorDataModelDataSource = InMemorySensorDataModelDataSource(),
-                            coroutineScope = CoroutineScope(Dispatchers.IO),
-                            fusedUpdatesDelayMs = this.sampleTimeLocationUpdateMs
-                        )
-                        return FreeLocationProvider(engine)
-                    }
-                    EngineType.INVALID -> {
-                        throw Error("Invalid FreeLocationProvider engine")
-                    }
+        /**
+         * The coroutine scope used to launch background jobs, this should typically be
+         * either lifecycleScope or viewModelScope so the jobs are bound to the activity lifecycle.
+         */
+        var coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.IO)
+
+        /**
+         * The dispatcher to be used to run the background jobs, this should typically be IO
+         * to avoid blocking the UI thread.
+         */
+        var coroutineDispatcher: CoroutineDispatcher = Dispatchers.IO
+
+        /**
+         * Sets parameters for building [FreeLocationProvider]
+         */
+        fun configure(callback: (Builder) -> Unit): Builder {
+            this.apply(callback)
+            return this
+        }
+
+        /**
+         * Builds the [FreeLocationProvider] instance based on [configure] content
+         */
+        fun build(): FreeLocationProvider {
+            when(this.engineType) {
+                EngineType.GPS_EXTRAPOLATION -> {
+                    val engine = UseGpsOnlyEngine(
+                        gpsLocationDataSource = InMemoryLocationModelDataSource(),
+                        fusedLocationDataSource = InMemoryLocationModelDataSource(),
+                        sensorDataModelDataSource = InMemorySensorDataModelDataSource(),
+                        coroutineScope = coroutineScope,
+                        coroutineDispatcher = coroutineDispatcher,
+                        fusedUpdatesDelayMs = this.sampleTimeLocationUpdateMs
+                    )
+                    return FreeLocationProvider(engine)
+                }
+                EngineType.FUSED -> {
+                    val engine = UseGpsLinearAccelKalmanEngine(
+                        gpsLocationDataSource = InMemoryLocationModelDataSource(),
+                        fusedLocationDataSource = InMemoryLocationModelDataSource(),
+                        sensorDataModelDataSource = InMemorySensorDataModelDataSource(),
+                        coroutineScope = coroutineScope,
+                        coroutineDispatcher = coroutineDispatcher,
+                        fusedUpdatesDelayMs = this.sampleTimeLocationUpdateMs
+                    )
+                    return FreeLocationProvider(engine)
+                }
+                EngineType.INVALID -> {
+                    throw Error("Invalid FreeLocationProvider engine")
                 }
             }
         }

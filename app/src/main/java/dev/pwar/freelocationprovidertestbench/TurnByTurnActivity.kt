@@ -8,6 +8,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import android.hardware.SensorManager
 import android.location.Location
 import android.os.Bundle
 import android.util.Log
@@ -17,13 +18,12 @@ import androidx.annotation.DrawableRes
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.content.ContextCompat
-import androidx.databinding.DataBindingUtil
+import androidx.lifecycle.lifecycleScope
 import com.mapbox.api.directions.v5.models.Bearing
 import com.mapbox.api.directions.v5.models.RouteOptions
 import com.mapbox.bindgen.Expected
 import com.mapbox.geojson.Point
 import com.mapbox.maps.EdgeInsets
-import com.mapbox.maps.extension.style.layers.addLayer
 import com.mapbox.maps.plugin.LocationPuck2D
 import com.mapbox.maps.plugin.animation.camera
 import com.mapbox.maps.plugin.annotation.AnnotationConfig
@@ -38,8 +38,6 @@ import com.mapbox.navigation.base.TimeFormat
 import com.mapbox.navigation.base.extensions.applyDefaultNavigationOptions
 import com.mapbox.navigation.base.extensions.applyLanguageAndVoiceUnitOptions
 import com.mapbox.navigation.base.formatter.DistanceFormatterOptions
-import com.mapbox.navigation.base.options.DeviceProfile
-import com.mapbox.navigation.base.options.DeviceType
 import com.mapbox.navigation.base.options.NavigationOptions
 import com.mapbox.navigation.base.route.NavigationRoute
 import com.mapbox.navigation.base.route.NavigationRouterCallback
@@ -54,7 +52,6 @@ import com.mapbox.navigation.core.lifecycle.requireMapboxNavigation
 import com.mapbox.navigation.core.replay.MapboxReplayer
 import com.mapbox.navigation.core.replay.ReplayLocationEngine
 import com.mapbox.navigation.core.replay.route.ReplayProgressObserver
-import com.mapbox.navigation.core.replay.route.ReplayRouteMapper
 import com.mapbox.navigation.core.trip.session.LocationMatcherResult
 import com.mapbox.navigation.core.trip.session.LocationObserver
 import com.mapbox.navigation.core.trip.session.RouteProgressObserver
@@ -98,8 +95,6 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.transform
 import kotlinx.coroutines.launch
 import java.io.File
-import java.time.LocalDateTime
-import java.util.Date
 import java.util.Locale
 
 /**
@@ -659,9 +654,9 @@ class TurnByTurnActivity : AppCompatActivity() {
         val isFused = bundle?.getBoolean("isFused")  != false
 
         val engineType = if(isFused){
-            FreeLocationProvider.Builder.EngineType.FUSED_LINEAR_ACCELERATION
+            FreeLocationProvider.Builder.EngineType.FUSED
         } else {
-            FreeLocationProvider.Builder.EngineType.GPS_INTERPOLATION
+            FreeLocationProvider.Builder.EngineType.GPS_EXTRAPOLATION
         }
 
         Toast.makeText(this.baseContext,
@@ -670,31 +665,43 @@ class TurnByTurnActivity : AppCompatActivity() {
             Toast.LENGTH_LONG
         ).show()
 
-        val locationProvider = FreeLocationProvider.Builder.Builder()
-            .engineType(engineType)
-            .sampleTimeLocationUpdate(if (isFused) {200} else {1000})
-            .build()
+// Create the location provider
+val locationProvider = FreeLocationProvider.Builder(this.baseContext)
+    .configure { provider ->
+        provider.coroutineScope = lifecycleScope
+        provider.coroutineDispatcher = Dispatchers.IO
+        provider.engineType = engineType
+        provider.sampleTimeLocationUpdateMs = 1000
+    }
+    .build()
 
-        GlobalScope.launch(Dispatchers.IO) {
+// Create and initialize engine
+val engine = FreeLocationProviderMapboxEngine.Builder(this.baseContext)
+    .configure { mEngine ->
+        mEngine.coroutineScope = lifecycleScope
+        mEngine.coroutineDispatcher = Dispatchers.IO
+        mEngine.isDebugEnabled = true
+        mEngine.isDebugLogFileEnabled = false
+        mEngine.sensorDelay = SensorManager.SENSOR_DELAY_NORMAL
+    }
+    .build(locationProvider)
+    .apply {
+        initialize(replayFile = replayFile)
+    }
+
+
+MapboxNavigationApp.setup(
+    NavigationOptions.Builder(this)
+        .accessToken(getString(R.string.mapbox_access_token))
+        .locationEngine(engine)
+        .build()
+)
+
+        lifecycleScope.launch(Dispatchers.IO) {
             locationProvider.getRawLocationFlow().transform<LocationModel,Nothing> {
                 gpsLocationModel = it
             }.collect()
         }
-
-        // Create and initialize engine
-        val engine = FreeLocationProviderMapboxEngine(
-            context = this,
-            provider = locationProvider,
-        ).apply {
-            initialize(replayFile = replayFile)
-        }
-
-        MapboxNavigationApp.setup(
-            NavigationOptions.Builder(this)
-                .accessToken(getString(R.string.mapbox_access_token))
-                .locationEngine(engine)
-                .build()
-        )
 
         // Handle GPS checkbox
         binding.useGpsCheckbox.setOnCheckedChangeListener { _, isChecked ->
