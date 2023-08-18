@@ -50,7 +50,7 @@ dependencyResolutionManagement {
 Add the dependency in your app's `build.gradle`:
 
 ```groovy
-implementation 'io.github.fcuringa:freelocationprovider:0.1.0'
+implementation 'io.github.fcuringa:freelocationprovider:0.2.0'
 ```
 
 ### Mapbox engine - `FreeLocationProviderMapbox`
@@ -62,8 +62,11 @@ See https://docs.mapbox.com/android/navigation/guides/get-started/install/.
 Add the dependencies in your app's `build.gradle`:
 
 ```groovy
-implementation "com.mapbox.navigation:android:2.10.4"   // Mapbox Navigation setup required
-implementation 'io.github.fcuringa:freelocationprovider-mapbox:0.1.0'
+implementation "com.mapbox.navigation:android:2.10.4"   // Mapbox Navigation
+
+// FreeLocationProvider dependencies
+implementation 'io.github.fcuringa:freelocationprovider-mapbox:0.2.0'
+implementation 'io.github.fcuringa:freelocationprovider:0.2.0'
 ```
 
 ## API usage
