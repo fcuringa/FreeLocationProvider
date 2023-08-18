@@ -7,6 +7,7 @@ import dev.pwar.freelocationprovider.data.SensorDataModelDataSource
 import dev.pwar.freelocationprovider.domain.LocationModel
 import dev.pwar.freelocationprovider.domain.SensorDataModel
 import dev.pwar.freelocationprovider.domain.SensorType
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -22,6 +23,7 @@ class UseGpsLinearAccelKalmanEngine(
     private val sensorDataModelDataSource: SensorDataModelDataSource,
     private val fusedLocationDataSource: LocationModelDataSource,
     private val coroutineScope: CoroutineScope,
+    private val coroutineDispatcher: CoroutineDispatcher,
     private val fusedUpdatesDelayMs: Long
 ) : UseCaseEngine {
     private var cachedLocation = LocationModel.DEFAULT_LOCATION_MODEL
@@ -29,7 +31,7 @@ class UseGpsLinearAccelKalmanEngine(
     private var accBearingDiff = 0.0
 
     init {
-        coroutineScope.launch {
+        coroutineScope.launch(coroutineDispatcher) {
             var lastGyroUpdate = LocalDateTime.MIN
             sensorDataModelDataSource.getFlow()
                 .filter { it.type == SensorType.GAME_ROTATION_VECTOR }
@@ -84,7 +86,7 @@ class UseGpsLinearAccelKalmanEngine(
                 }
         }
 
-        coroutineScope.launch {
+        coroutineScope.launch(coroutineDispatcher) {
             Log.d("UseGpsLinearAccelKalmanEngine", "Starting collection")
             var cachedSensorDataLinAcc = SensorDataModel.SENSOR_DATA_MODEL_DEFAULT
             sensorDataModelDataSource.getFlow()

@@ -73,17 +73,29 @@ Once installed, this is how you may use this library.
 ### Using the Mapbox integration
 
 ```kotlin
-val locationProvider = FreeLocationProvider.Builder.Builder()
-            .sampleTimeLocationUpdate(1000)    // Time between updates in ms
-            .build() // ACCESS_FINE_LOCATION permission MUST have ben accepted before calling
+// Create the location provider
+val locationProvider = FreeLocationProvider.Builder(this.baseContext)
+    .configure { provider ->
+        provider.coroutineScope = lifecycleScope        // Tie the provider to the activity lifecycle
+        provider.coroutineDispatcher = Dispatchers.IO
+        provider.engineType = EngineType.FUSED          // Use fused engine
+        provider.sampleTimeLocationUpdateMs = 1000      // Request 1 location update per second
+    }
+    .build()    // ACCESS_FINE_LOCATION permission MUST have ben granted before calling
 
-// Create Mapbox Engine
-val engine = FreeLocationProviderMapboxEngine(
-    context = this,
-    provider = locationProvider,
-).apply {
-    initialize()    // Optionally, pass a replay file here to replay a trip
-}
+// Create and initialize engine
+val engine = FreeLocationProviderMapboxEngine.Builder(this.baseContext)
+    .configure { mEngine ->
+        mEngine.coroutineScope = lifecycleScope
+        mEngine.coroutineDispatcher = Dispatchers.IO
+        mEngine.isDebugEnabled = true           // Print debug logs in logcat
+        mEngine.isDebugLogFileEnabled = true    // Save those logs in a file under .FreeLocationProvider 
+        mEngine.sensorDelay = SensorManager.SENSOR_DELAY_NORMAL
+    }
+    .build(locationProvider)
+    .apply {
+        initialize()    // Optionally pass a replay file to replay a previous route instead of tracking
+    }
 
 // Finally setup MapboxNavigation
 val navigationOptions = NavigationOptions.Builder(this)

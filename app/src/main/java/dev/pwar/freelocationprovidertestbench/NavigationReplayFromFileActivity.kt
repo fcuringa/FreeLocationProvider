@@ -35,9 +35,7 @@ class NavigationReplayFromFileActivity : AppCompatActivity() {
     private lateinit var binding: MapboxActivityNavigationViewBinding
     private lateinit var pointAnnotationManager: PointAnnotationManager
 
-    private val freeLocationProvider: FreeLocationProvider = FreeLocationProvider.Builder.Builder()
-        .engineType(FreeLocationProvider.Builder.EngineType.FUSED_LINEAR_ACCELERATION)
-        .sampleTimeLocationUpdate(200)
+    private val freeLocationProvider: FreeLocationProvider = FreeLocationProvider.Builder(this)
         .build()
     private var curTime = LocalDateTime.MIN
 

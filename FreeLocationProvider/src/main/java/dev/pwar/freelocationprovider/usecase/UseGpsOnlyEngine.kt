@@ -7,6 +7,7 @@ import dev.pwar.freelocationprovider.domain.LocationModel
 import dev.pwar.freelocationprovider.domain.SensorDataModel
 import dev.pwar.freelocationprovider.domain.SensorType
 import dev.pwar.freelocationprovider.utils.tickerFlow
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -24,11 +25,12 @@ class UseGpsOnlyEngine(
     private val sensorDataModelDataSource: SensorDataModelDataSource,
     private val fusedLocationDataSource: LocationModelDataSource,
     private val coroutineScope: CoroutineScope,
+    private val coroutineDispatcher: CoroutineDispatcher,
     private val fusedUpdatesDelayMs: Long
 ): UseCaseEngine {
 
     init {
-        coroutineScope.launch {
+        coroutineScope.launch(coroutineDispatcher) {
             Log.d("UseGpsOnlyEngine", "Starting collection")
             var cachedLocation = LocationModel.DEFAULT_LOCATION_MODEL
             var cachedSensorDataLinAcc = SensorDataModel.SENSOR_DATA_MODEL_DEFAULT

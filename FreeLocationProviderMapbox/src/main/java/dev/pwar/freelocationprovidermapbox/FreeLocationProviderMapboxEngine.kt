@@ -10,6 +10,7 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.location.Location
+import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Build
 import android.os.Looper
@@ -39,10 +40,13 @@ class FreeLocationProviderMapboxEngine(
     private val context: Context,
     private val provider: FreeLocationProvider,
     private val coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.IO),
+    private val coroutineDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val sensorDelay: Int = SensorManager.SENSOR_DELAY_UI,
     private val isDebugEnabled: Boolean = true,
+    private val isDebugLogFileEnabled: Boolean = true,
     private val logFile: File = File("${context.filesDir}/.FreeLocationProvider/log-start-${Build.MODEL}-${LocalDateTime.now()}.csv"),
     private val locationCacheFile: File = File("${context.filesDir}/.FreeLocationProvider/cache.json")
-): LocationEngine, SensorEventListener {
+) : LocationEngine, SensorEventListener, LocationListener {
 
     companion object {
         const val LOG_TAG = "FreeLocationProviderMapboxEngine"
@@ -67,7 +71,7 @@ class FreeLocationProviderMapboxEngine(
         looper: Looper?
     ) {
         Log.d(LOG_TAG, "requestLocationUpdates $request, $callback, $looper")
-        jobByCallback[callback] = coroutineScope.launch {
+        jobByCallback[callback] = coroutineScope.launch(coroutineDispatcher) {
             provider.getFusedLocationFlow().collect {
                 Log.d(LOG_TAG, "requestLocationUpdates.collect -> $it")
                 callback.onSuccess(
@@ -94,13 +98,28 @@ class FreeLocationProviderMapboxEngine(
     }
 
     override fun onSensorChanged(p0: SensorEvent?) {
-        if (p0 != null){
-            coroutineScope.launch {
+        if (!this.coroutineScope.isActive) {
+            try {
+                val locationManager =
+                    context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+                val sensorManager =
+                    context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+
+                sensorManager.unregisterListener(this)
+                locationManager.removeUpdates(this)
+                Log.d(LOG_TAG, "Unregistered sensor and location listeners")
+            } catch (e: Exception) {
+                Log.w(LOG_TAG, "Could not unregister listeners ${e.stackTraceToString()}")
+            }
+            return
+        }
+        if (p0 != null) {
+            coroutineScope.launch(coroutineDispatcher) {
                 provider.feedSensor(
                     sensorDataModelFromSensorEvent(p0)
                 )
             }
-            if(isDebugEnabled) logSensorData(p0)
+            if (isDebugEnabled) logSensorData(p0)
         }
     }
 
@@ -110,21 +129,24 @@ class FreeLocationProviderMapboxEngine(
 
     private fun logMsg(tag: String, msg: String) {
         Log.d(tag, msg)
-        writeToLogFile(msg)
+        if (isDebugLogFileEnabled) writeToLogFile(msg)
     }
 
     private fun logSensorData(event: SensorEvent) {
         val now = LocalDateTime.now()
-        val msg = "data;$now;${event.sensor.stringType};${event.values.map { "$it" }.joinToString(
-            prefix = "", postfix = "", separator = ";"
-        )}"
+        val msg = "data;$now;${event.sensor.stringType};${
+            event.values.map { "$it" }.joinToString(
+                prefix = "", postfix = "", separator = ";"
+            )
+        }"
 
         logMsg("data", msg)
     }
 
     private fun logPosition(pos: Location) {
         val now = LocalDateTime.now()
-        val msg = "position;$now;${pos.latitude};${pos.longitude};${pos.bearing};${pos.accuracy};${pos.speed}"
+        val msg =
+            "position;$now;${pos.latitude};${pos.longitude};${pos.bearing};${pos.accuracy};${pos.speed}"
 
         logMsg("position", msg)
     }
@@ -140,16 +162,17 @@ class FreeLocationProviderMapboxEngine(
      *
      * @param replayFile File to read the replay data from. Leave null to not use replay mode
      */
-    fun initialize(replayFile: File? = null){
+    fun initialize(replayFile: File? = null) {
         Log.d(LOG_TAG, "Initializing the engine")
-        if (replayFile == null){
+        if (replayFile == null) {
             if (isDebugEnabled) {
                 logFile.parentFile?.mkdir()
                 logFile.createNewFile()
                 logFile.parentFile?.listFiles()?.forEach {
                     Log.d(LOG_TAG, "Checking if ${it.name} should be deleted...")
-                    val timeDiffSeconds = LocalDateTime.now().toEpochSecond(ZoneOffset.UTC) - it.lastModified()/1000.0f
-                    if(timeDiffSeconds > 14 * 24 * 3600) {
+                    val timeDiffSeconds = LocalDateTime.now()
+                        .toEpochSecond(ZoneOffset.UTC) - it.lastModified() / 1000.0f
+                    if (timeDiffSeconds > 14 * 24 * 3600) {
                         it.delete()
                         Log.d(LOG_TAG, "Deleted $it, was created $timeDiffSeconds seconds ago")
                     } else {
@@ -159,7 +182,8 @@ class FreeLocationProviderMapboxEngine(
             }
 
             // Not replay mode, use actual sensors
-            val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+            val locationManager =
+                context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
             val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
             val gravitySensor = sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
             val linAccSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
@@ -169,12 +193,12 @@ class FreeLocationProviderMapboxEngine(
             val rotVector = sensorManager.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
 
             // Listen to sensors
-            sensorManager.registerListener(this, gravitySensor, SensorManager.SENSOR_DELAY_UI)
-            sensorManager.registerListener(this, linAccSensor, SensorManager.SENSOR_DELAY_UI)
-            sensorManager.registerListener(this, rotVecSensor, SensorManager.SENSOR_DELAY_UI)
-            sensorManager.registerListener(this, accelSensor, SensorManager.SENSOR_DELAY_UI)
-            sensorManager.registerListener(this, gyroSensor, SensorManager.SENSOR_DELAY_UI)
-            sensorManager.registerListener(this, rotVector, SensorManager.SENSOR_DELAY_UI)
+            sensorManager.registerListener(this, gravitySensor, sensorDelay)
+            sensorManager.registerListener(this, linAccSensor, sensorDelay)
+            sensorManager.registerListener(this, rotVecSensor, sensorDelay)
+            sensorManager.registerListener(this, accelSensor, sensorDelay)
+            sensorManager.registerListener(this, gyroSensor, sensorDelay)
+            sensorManager.registerListener(this, rotVector, sensorDelay)
 
             if (ActivityCompat.checkSelfPermission(
                     context,
@@ -184,16 +208,22 @@ class FreeLocationProviderMapboxEngine(
                     Manifest.permission.ACCESS_COARSE_LOCATION
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
-                throw Exception("Missing permission, make sure ACCESS_FINE_LOCATION has been granted" +
-                        "before initializing this class")
+                throw Exception(
+                    "Missing permission, make sure ACCESS_FINE_LOCATION has been granted" +
+                            "before initializing this class"
+                )
             }
 
             // Load from cache if possible
             try {
                 locationCacheFile.readText().apply {
                     val cachedLocation = LocationModelInterface.loadFromString(this)
-                    coroutineScope.launch(Dispatchers.IO) {
-                        provider.feedLocation(locationModelInterfaceToLocationModelMapper(cachedLocation))
+                    coroutineScope.launch(coroutineDispatcher) {
+                        provider.feedLocation(
+                            locationModelInterfaceToLocationModelMapper(
+                                cachedLocation
+                            )
+                        )
                     }
                     Log.d(LOG_TAG, "Loaded location from cache: $cachedLocation")
                 }
@@ -201,27 +231,16 @@ class FreeLocationProviderMapboxEngine(
                 Log.d(LOG_TAG, "Could not load location from cache: $err")
             }
 
-            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 500, 0.0f) {
-                Log.d(LOG_TAG, "Update from GPS provider: $it")
-                if (isDebugEnabled) logPosition(it)
-                if (!gpsUpdateAllowed){
-                    Log.d(LOG_TAG, "GPS update was rejected due to not being allowed by user")
-                    return@requestLocationUpdates
-                }
-                coroutineScope.launch(Dispatchers.IO) {
-                    Log.d(LOG_TAG, "GPS update allowed, feeding provider")
-                    provider.feedLocation(locationModelFromLocationMapper(it))
-                }
-            }
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 500, 0.0f, this)
 
             // Keep cache updated
-            coroutineScope.launch {
+            coroutineScope.launch(coroutineDispatcher) {
                 provider.getFusedLocationFlow()
                     .sample(5000) // Avoid writing too often
                     .flowOn(Dispatchers.IO)
                     .collect {
                         try {
-                            if (!locationCacheFile.exists()){
+                            if (!locationCacheFile.exists()) {
                                 locationCacheFile.parentFile?.mkdir()
                                 locationCacheFile.createNewFile()
                             }
@@ -229,7 +248,7 @@ class FreeLocationProviderMapboxEngine(
                                 locationModelToLocationModelInterfaceMapper(it).dumpToJsonString()
                             )
                             Log.d(LOG_TAG, "Location cache was updated")
-                        } catch (err: Exception){
+                        } catch (err: Exception) {
                             Log.d(LOG_TAG, "Could not create location cache: $err")
                         }
                     }
@@ -237,12 +256,12 @@ class FreeLocationProviderMapboxEngine(
         } else {
             // Replay mode
             if (!replayFile.exists()) throw Exception("Replay file does not exist")
-            coroutineScope.launch {
+            coroutineScope.launch(coroutineDispatcher) {
                 val reader = replayFile.bufferedReader()
                 var hasReceiverFirstPosition = false
                 for (line in reader.lineSequence()) {
                     // Try to feed sensor data if line is such
-                    if (hasReceiverFirstPosition){
+                    if (hasReceiverFirstPosition) {
                         try {
                             val sensorDataModel = sensorDataModelFromLogLine(line)
                             waitUntil(sensorDataModel.timestamp)
@@ -260,7 +279,7 @@ class FreeLocationProviderMapboxEngine(
                         waitUntil(locationModel.timestamp)
 
                         // Time to apply
-                        if (gpsUpdateAllowed || !hasReceiverFirstPosition){
+                        if (gpsUpdateAllowed || !hasReceiverFirstPosition) {
                             provider.feedLocation(locationModel)
                             Log.d("handleFile", "Fed location $locationModel")
                             hasReceiverFirstPosition = true
@@ -283,6 +302,93 @@ class FreeLocationProviderMapboxEngine(
         while (curTime < time) {
             delay(4)
             curTime = curTime.plusNanos(5_000_000)
+        }
+    }
+
+    override fun onLocationChanged(p0: Location) {
+        Log.d(LOG_TAG, "Update from GPS provider: $p0")
+        if (isDebugEnabled) logPosition(p0)
+        if (!gpsUpdateAllowed) {
+            Log.d(LOG_TAG, "GPS update was rejected due to not being allowed by user")
+            return
+        }
+        coroutineScope.launch(coroutineDispatcher) {
+            Log.d(LOG_TAG, "GPS update allowed, feeding provider")
+            provider.feedLocation(locationModelFromLocationMapper(p0))
+        }
+    }
+
+    class Builder(private val context: Context) {
+
+        /**
+         * The coroutine scope used to launch background jobs, this should typically be
+         * either lifecycleScope or viewModelScope so the jobs are bound to the activity lifecycle.
+         */
+        var coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.IO)
+
+        /**
+         * The dispatcher to be used to run the background jobs, this should typically be IO
+         * to avoid blocking the UI thread.
+         */
+        var coroutineDispatcher: CoroutineDispatcher = Dispatchers.IO
+
+        /**
+         * Enables the logging of sensor and position raw data to logcat
+         */
+        var isDebugEnabled: Boolean = true
+
+        /**
+         * Enables saving the sensor and position raw data to logcat to [logFile]. The parameter
+         * [isDebugEnabled] must be true to use this.
+         */
+        var isDebugLogFileEnabled: Boolean = true
+
+        /**
+         * The destination log file in which the sensor and position raw data will be saved if
+         * [isDebugLogFileEnabled] is true.
+         */
+        var logFile: File =
+            File("${context.filesDir}/.FreeLocationProvider/log-start-${Build.MODEL}-${LocalDateTime.now()}.csv")
+
+        /**
+         * The cache file in which the latest know location will be saved so we can position the
+         * device quickly if the application is shutdown.
+         */
+        var locationCacheFile: File = File("${context.filesDir}/.FreeLocationProvider/cache.json")
+
+        /**
+         * The sensor delay value to be used for sensor even updates, should be one of
+         * [SensorManager.SENSOR_DELAY_UI], [SensorManager.SENSOR_DELAY_FASTEST],
+         * [SensorManager.SENSOR_DELAY_GAME],
+         * [SensorManager.SENSOR_DELAY_NORMAL]. Defaults to [SensorManager.SENSOR_DELAY_UI]
+         */
+        var sensorDelay: Int = SensorManager.SENSOR_DELAY_UI
+
+        /**
+         * Sets parameters for building [FreeLocationProviderMapboxEngine]
+         */
+        fun configure(callback: (Builder) -> Unit): Builder {
+            this.apply(callback)
+            return this
+        }
+
+        /**
+         * Build [FreeLocationProviderMapboxEngine] based on [configure] content
+         */
+        fun build(
+            provider: FreeLocationProvider
+        ): FreeLocationProviderMapboxEngine {
+            return FreeLocationProviderMapboxEngine(
+                context = context,
+                provider = provider,
+                coroutineScope,
+                coroutineDispatcher,
+                sensorDelay,
+                isDebugEnabled,
+                isDebugLogFileEnabled,
+                logFile,
+                locationCacheFile
+            )
         }
     }
 
