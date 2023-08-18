@@ -105,7 +105,7 @@ The application will not compile out-of-the-box as it requires some credentials 
 
 See https://docs.mapbox.com/android/navigation/guides/get-started/install/.
 
-First, you must add your Mapbox secret token to `gradle.properties`:
+First, you must add your Mapbox secret token to `mapbox.properties`:
 
 ```properties
 MAPBOX_DOWNLOADS_TOKEN=sk.ey...
