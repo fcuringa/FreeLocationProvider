@@ -2,7 +2,6 @@ package dev.pwar.freelocationprovidermapbox
 
 import android.Manifest
 import android.Manifest.permission.ACCESS_FINE_LOCATION
-import android.app.Activity
 import android.app.PendingIntent
 import android.content.Context
 import android.content.pm.PackageManager
@@ -37,7 +36,7 @@ import java.time.LocalDateTime
 import java.time.ZoneOffset
 
 class FreeLocationProviderMapboxEngine(
-    private val context: Activity,
+    private val context: Context,
     private val provider: FreeLocationProvider,
     private val coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.IO),
     private val isDebugEnabled: Boolean = true,

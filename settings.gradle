@@ -5,6 +5,10 @@ pluginManagement {
         gradlePluginPortal()
     }
 }
+
+def props = new Properties()
+file("mapbox.properties").withInputStream { props.load(it) }
+
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
@@ -20,7 +24,7 @@ dependencyResolutionManagement {
                 // This should always be `mapbox` (not your username).
                 username = "mapbox"
                 // Use the secret token you stored in gradle.properties as the password
-                password = MAPBOX_DOWNLOADS_TOKEN
+                password = props.getProperty("MAPBOX_DOWNLOADS_TOKEN")
             }
         }
     }

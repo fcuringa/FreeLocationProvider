@@ -664,7 +664,7 @@ class TurnByTurnActivity : AppCompatActivity() {
             FreeLocationProvider.Builder.EngineType.GPS_INTERPOLATION
         }
 
-        Toast.makeText(this,
+        Toast.makeText(this.baseContext,
             if (replayFile != null) "Replaying $fileName (${engineType.name})"
             else "Tracking started (${engineType.name})",
             Toast.LENGTH_LONG
