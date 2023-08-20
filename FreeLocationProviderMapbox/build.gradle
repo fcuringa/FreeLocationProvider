@@ -52,7 +52,7 @@ dependencies {
 
 ext {
     PUBLISH_GROUP_ID = 'io.github.fcuringa'
-    PUBLISH_VERSION = '0.2.0'
+    PUBLISH_VERSION = '0.3.0'
     PUBLISH_ARTIFACT_ID = 'freelocationprovider-mapbox'
     PUBLISH_DESCRIPTION = 'Location provider for Android - Mapbox integration'
     PUBLISH_URL = 'https://github.com/fcuringa/FreeLocationProvider'
