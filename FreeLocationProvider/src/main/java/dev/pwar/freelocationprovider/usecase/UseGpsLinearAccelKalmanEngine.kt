@@ -24,12 +24,17 @@ class UseGpsLinearAccelKalmanEngine(
     private val fusedLocationDataSource: LocationModelDataSource,
     private val coroutineScope: CoroutineScope,
     private val coroutineDispatcher: CoroutineDispatcher,
-    private val fusedUpdatesDelayMs: Long
+    private val fusedUpdatesDelayMs: Long,
+    private val maxLocationAccuracy: Float
 ) : UseCaseEngine {
     private var cachedLocation = LocationModel.DEFAULT_LOCATION_MODEL
     private var cachedOrientationVector: List<Double> = emptyList()
     private var accBearingDiff = 0.0
 
+    companion object {
+        const val LOG_TAG = "UseGpsLinearAccelKalmanEngine"
+    }
+    
     init {
         coroutineScope.launch(coroutineDispatcher) {
             var lastGyroUpdate = LocalDateTime.MIN
@@ -52,11 +57,11 @@ class UseGpsLinearAccelKalmanEngine(
 
                         if (cachedOrientationVector.isNotEmpty()){
                             Log.d(
-                                "UseGpsLinearAccelKalmanEngine",
+                                LOG_TAG,
                                 "Vehicle orientation: ${orientationVector.map { it*180/ PI }}"
                             )
                             Log.d(
-                                "UseGpsLinearAccelKalmanEngine",
+                                LOG_TAG,
                                 "Vehicle orientation cached: ${cachedOrientationVector.map { it*180/ PI }}"
                             )
                             val bearingDiff = orientationVector[0] - cachedOrientationVector[0]
@@ -73,9 +78,9 @@ class UseGpsLinearAccelKalmanEngine(
                             accBearingDiff += (bearingDiff * 180.0/PI)
 
                             cachedLocation = newCachedLoc
-                            Log.d("UseGpsLinearAccelKalmanEngine",
+                            Log.d(LOG_TAG,
                                 "Sensor update of fused loc: $newCachedLoc")
-                            Log.d("UseGpsLinearAccelKalmanEngine",
+                            Log.d(LOG_TAG,
                                 "Vehicle orientation bearing diff (acc): ${bearingDiff * 180.0/PI}")
                         }
                         cachedOrientationVector = orientationVector
@@ -87,34 +92,40 @@ class UseGpsLinearAccelKalmanEngine(
         }
 
         coroutineScope.launch(coroutineDispatcher) {
-            Log.d("UseGpsLinearAccelKalmanEngine", "Starting collection")
+            Log.d(LOG_TAG, "Starting collection")
             var cachedSensorDataLinAcc = SensorDataModel.SENSOR_DATA_MODEL_DEFAULT
             sensorDataModelDataSource.getFlow()
                 .filter { it.type == SensorType.LINEAR_ACCELERATION }
                 .combine(
                     gpsLocationDataSource.getFlow().filter { it.isValid() }) { sensorData, gpsLoc ->
-                    Log.d("UseGpsLinearAccelKalmanEngine", "Combine $sensorData, $gpsLoc")
+                    Log.d(LOG_TAG, "Combine $sensorData, $gpsLoc")
                     if (!cachedLocation.isValid() && gpsLoc.isValid()) {
                         globalX = locationModelToState(gpsLoc)
                     }
-                    if (!gpsLoc.isValid()) return@combine
+
+                    // Basic location validity check
+                    if (!gpsLoc.isValid()) {
+                        Log.d(LOG_TAG, "Skipped $gpsLoc as invalid")
+                        return@combine
+                    }
 
                     if (sensorData.type == SensorType.LINEAR_ACCELERATION) cachedSensorDataLinAcc =
                         sensorData
 
                     if (gpsLoc.timestamp != cachedLocation.timestamp) {
                         // New location from GPS chip
-                        val lastEmittedDiffState = locationModelToState(fusedLocationDataSource.get().minus(cachedLocation))
+                        // Check location accuracy radius
+                        if (gpsLoc.accuracy > maxLocationAccuracy) {
+                            Log.d(LOG_TAG, "Location $gpsLoc skipped as too inaccurate " +
+                                    "(max tolerated error $maxLocationAccuracy)")
+                            return@combine
+                        }
                         val newGpsDiffState = locationModelToState(gpsLoc.minus(cachedLocation))
                         if (newGpsDiffState[0] != 0.0 && newGpsDiffState[1] != 0.0){
-                            val errX = (newGpsDiffState[0]-lastEmittedDiffState[0])/(newGpsDiffState[0])
-                            val errY = (newGpsDiffState[1]-lastEmittedDiffState[1])/(newGpsDiffState[1])
-
                             accBearingDiff = 0.0
                         }
 
-                        Log.d("UseGpsLinearAccelKalmanEngine",
-                            "New location from GPS: $gpsLoc")
+                        Log.d(LOG_TAG, "New location from GPS: $gpsLoc")
                         cachedLocation = gpsLoc
                         processUpdate(gpsLoc, cachedSensorDataLinAcc)
                     } else {
@@ -161,7 +172,7 @@ class UseGpsLinearAccelKalmanEngine(
     private suspend fun processUpdate(location: LocationModel, sensorData: SensorDataModel) {
         if (!this::globalX.isInitialized) {
             Log.d(
-                "UseGpsLinearAccelKalmanEngine",
+                LOG_TAG,
                 "Skipping state update as state not initialized yet"
             )
             return
@@ -219,8 +230,8 @@ class UseGpsLinearAccelKalmanEngine(
 
         // R matrix, measurement noise. Set by time since last update
         val timeDiffSinceLastGpsMillis = max(ChronoUnit.MILLIS.between(cachedLocation.timestamp, sensorData.timestamp),1)
-        Log.d("UseGpsLinearAccelKalmanEngine", "Cached: $cachedLocation, sensor data: $sensorData")
-        Log.d("UseGpsLinearAccelKalmanEngine", "time diff since last GPS: $timeDiffSinceLastGpsMillis ms")
+        Log.d(LOG_TAG, "Cached: $cachedLocation, sensor data: $sensorData")
+        Log.d(LOG_TAG, "time diff since last GPS: $timeDiffSinceLastGpsMillis ms")
         val sigmaXYSquare = 0.001 * timeDiffSinceLastGpsMillis
         val matR = SimpleMatrix(
             arrayOf(
@@ -234,10 +245,10 @@ class UseGpsLinearAccelKalmanEngine(
         // Input
         val matU = getMatU(sensorData, location)
 
-        Log.d("UseGpsLinearAccelKalmanEngine", "dt: $dt")
-        Log.d("UseGpsLinearAccelKalmanEngine", "Input: $matU")
-        Log.d("UseGpsLinearAccelKalmanEngine", "Input raw: $sensorData, $location")
-        Log.d("UseGpsLinearAccelKalmanEngine", "State: $globalX")
+        Log.d(LOG_TAG, "dt: $dt")
+        Log.d(LOG_TAG, "Input: $matU")
+        Log.d(LOG_TAG, "Input raw: $sensorData, $location")
+        Log.d(LOG_TAG, "State: $globalX")
 
         /*
          * Filter steps
@@ -269,12 +280,12 @@ class UseGpsLinearAccelKalmanEngine(
         val predictedLocation = stateToLocationModel(matXPrediction, sensorData.timestamp)
 
         // Log
-        Log.d("UseGpsLinearAccelKalmanEngine", "GPS location: $cachedLocation")
-        Log.d("UseGpsLinearAccelKalmanEngine", "Predicted location: $predictedLocation")
-        Log.d("UseGpsLinearAccelKalmanEngine",
+        Log.d(LOG_TAG, "GPS location: $cachedLocation")
+        Log.d(LOG_TAG, "Predicted location: $predictedLocation")
+        Log.d(LOG_TAG,
             "Diff GPS/Predicted: ${predictedLocation.minus(cachedLocation)}")
-        Log.d("UseGpsLinearAccelKalmanEngine", "Actual new location: $newLocation")
-        Log.d("UseGpsLinearAccelKalmanEngine",
+        Log.d(LOG_TAG, "Actual new location: $newLocation")
+        Log.d(LOG_TAG,
             "Diff GPS/New: ${newLocation.minus(cachedLocation)}")
 
         // Done - update globals

@@ -338,7 +338,7 @@ class FreeLocationProviderMapboxEngine(
         var isDebugEnabled: Boolean = true
 
         /**
-         * Enables saving the sensor and position raw data to logcat to [logFile]. The parameter
+         * Enables saving the sensor and position raw data to [logFile]. The parameter
          * [isDebugEnabled] must be true to use this.
          */
         var isDebugLogFileEnabled: Boolean = true
