@@ -74,6 +74,15 @@ class FreeLocationProvider(
         var coroutineDispatcher: CoroutineDispatcher = Dispatchers.IO
 
         /**
+         * The maximum tolerated error on a newly received GPS position for it to be applied, any
+         * location whose Location.getAccuracy() value is higher than this value will be ignored
+         * to avoid the position of the device being affected by inaccurate updates from the GPS.
+         * This setting only affects the engine if [EngineType.FUSED] is used.
+         * Defaults to 20m.
+         */
+        var maxLocationAccuracy: Float = 20.0f
+
+        /**
          * Sets parameters for building [FreeLocationProvider]
          */
         fun configure(callback: (Builder) -> Unit): Builder {
@@ -104,7 +113,8 @@ class FreeLocationProvider(
                         sensorDataModelDataSource = InMemorySensorDataModelDataSource(),
                         coroutineScope = coroutineScope,
                         coroutineDispatcher = coroutineDispatcher,
-                        fusedUpdatesDelayMs = this.sampleTimeLocationUpdateMs
+                        fusedUpdatesDelayMs = this.sampleTimeLocationUpdateMs,
+                        maxLocationAccuracy = maxLocationAccuracy
                     )
                     return FreeLocationProvider(engine)
                 }

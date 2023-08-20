@@ -135,7 +135,6 @@ class TurnByTurnActivity : AppCompatActivity() {
     private val mapboxReplayer = MapboxReplayer()
 
 
-
     /**
      * Debug tool that mocks location updates with an input from the [mapboxReplayer].
      */
@@ -352,14 +351,24 @@ class TurnByTurnActivity : AppCompatActivity() {
                 .withPoint(Point.fromLngLat(rawLocation.longitude, rawLocation.latitude))
                 // Specify the bitmap you assigned to the point annotation
                 // The bitmap will be added to map style automatically.
-                .withIconImage(bitmapFromDrawableRes(this@TurnByTurnActivity, R.drawable.baseline_blue_place_24)!!)
+                .withIconImage(
+                    bitmapFromDrawableRes(
+                        this@TurnByTurnActivity,
+                        R.drawable.baseline_blue_place_24
+                    )!!
+                )
 
             val pointAnnotationOptionsPureGps: PointAnnotationOptions = PointAnnotationOptions()
                 // Define a geographic coordinate.
                 .withPoint(Point.fromLngLat(gpsLocationModel.longitude, gpsLocationModel.latitude))
                 // Specify the bitmap you assigned to the point annotation
                 // The bitmap will be added to map style automatically.
-                .withIconImage(bitmapFromDrawableRes(this@TurnByTurnActivity, R.drawable.baseline_place_24)!!)
+                .withIconImage(
+                    bitmapFromDrawableRes(
+                        this@TurnByTurnActivity,
+                        R.drawable.baseline_place_24
+                    )!!
+                )
 
             if (this@TurnByTurnActivity::pointAnnotationManager.isInitialized) {
                 GlobalScope.launch(Dispatchers.Main) {
@@ -528,6 +537,7 @@ class TurnByTurnActivity : AppCompatActivity() {
             when (navigationCameraState) {
                 NavigationCameraState.TRANSITION_TO_FOLLOWING,
                 NavigationCameraState.FOLLOWING -> binding.recenter.visibility = View.INVISIBLE
+
                 NavigationCameraState.TRANSITION_TO_OVERVIEW,
                 NavigationCameraState.OVERVIEW,
                 NavigationCameraState.IDLE -> binding.recenter.visibility = View.VISIBLE
@@ -645,60 +655,62 @@ class TurnByTurnActivity : AppCompatActivity() {
         val bundle = intent.extras
 
         val fileName = bundle?.getString("fileName")
-        val replayFile = if (fileName != null){
+        val replayFile = if (fileName != null) {
             File("${this.applicationInfo.dataDir}/files/.FreeLocationProvider/$fileName")
         } else {
             null
         }
 
-        val isFused = bundle?.getBoolean("isFused")  != false
+        val isFused = bundle?.getBoolean("isFused") != false
 
-        val engineType = if(isFused){
+        val engineType = if (isFused) {
             FreeLocationProvider.Builder.EngineType.FUSED
         } else {
             FreeLocationProvider.Builder.EngineType.GPS_EXTRAPOLATION
         }
 
-        Toast.makeText(this.baseContext,
+        Toast.makeText(
+            this.baseContext,
             if (replayFile != null) "Replaying $fileName (${engineType.name})"
             else "Tracking started (${engineType.name})",
             Toast.LENGTH_LONG
         ).show()
 
-// Create the location provider
-val locationProvider = FreeLocationProvider.Builder(this.baseContext)
-    .configure { provider ->
-        provider.coroutineScope = lifecycleScope
-        provider.coroutineDispatcher = Dispatchers.IO
-        provider.engineType = engineType
-        provider.sampleTimeLocationUpdateMs = 1000
-    }
-    .build()
+        // Create the location provider
+        val locationProvider = FreeLocationProvider.Builder(this.baseContext)
+            .configure { provider ->
+                provider.coroutineScope = lifecycleScope
+                provider.coroutineDispatcher = Dispatchers.IO
+                provider.engineType = engineType
+                provider.sampleTimeLocationUpdateMs = 1000
+                provider.maxLocationAccuracy = 20.0f
+            }
+            .build()
 
-// Create and initialize engine
-val engine = FreeLocationProviderMapboxEngine.Builder(this.baseContext)
-    .configure { mEngine ->
-        mEngine.coroutineScope = lifecycleScope
-        mEngine.coroutineDispatcher = Dispatchers.IO
-        mEngine.isDebugEnabled = true
-        mEngine.isDebugLogFileEnabled = false
-        mEngine.sensorDelay = SensorManager.SENSOR_DELAY_NORMAL
-    }
-    .build(locationProvider)
-    .apply {
-        initialize(replayFile = replayFile)
-    }
+        // Create and initialize engine
+        val engine = FreeLocationProviderMapboxEngine.Builder(this.baseContext)
+            .configure { mEngine ->
+                mEngine.coroutineScope = lifecycleScope
+                mEngine.coroutineDispatcher = Dispatchers.IO
+                mEngine.isDebugEnabled = true
+                mEngine.isDebugLogFileEnabled = false
+                mEngine.sensorDelay = SensorManager.SENSOR_DELAY_NORMAL
+            }
+            .build(locationProvider)
+            .apply {
+                initialize(replayFile = replayFile)
+            }
 
 
-MapboxNavigationApp.setup(
-    NavigationOptions.Builder(this)
-        .accessToken(getString(R.string.mapbox_access_token))
-        .locationEngine(engine)
-        .build()
-)
+        MapboxNavigationApp.setup(
+            NavigationOptions.Builder(this)
+                .accessToken(getString(R.string.mapbox_access_token))
+                .locationEngine(engine)
+                .build()
+        )
 
         lifecycleScope.launch(Dispatchers.IO) {
-            locationProvider.getRawLocationFlow().transform<LocationModel,Nothing> {
+            locationProvider.getRawLocationFlow().transform<LocationModel, Nothing> {
                 gpsLocationModel = it
             }.collect()
         }

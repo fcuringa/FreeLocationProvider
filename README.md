@@ -83,6 +83,7 @@ val locationProvider = FreeLocationProvider.Builder(this.baseContext)
         provider.coroutineDispatcher = Dispatchers.IO
         provider.engineType = EngineType.FUSED          // Use fused engine
         provider.sampleTimeLocationUpdateMs = 1000      // Request 1 location update per second
+        provider.maxLocationAccuracy = 20.0f            // Ignore inaccurate GPS updates
     }
     .build()    // ACCESS_FINE_LOCATION permission MUST have ben granted before calling
 
